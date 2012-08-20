@@ -59,8 +59,8 @@ add_container(stack = Type, Node, Options) ->
                                    timeout  = Timeout,
                                    function = Function}],
     ChildSpec = {Id,
-                 {leo_ordning_reda, start_link, Args},
-                 permanent, 2000, worker, [leo_ordning_reda]},
+                 {leo_ordning_reda_server, start_link, Args},
+                 permanent, 2000, worker, [leo_ordning_reda_server]},
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, _Pid} ->
@@ -98,7 +98,7 @@ stack(Node, Object) ->
     Id = gen_id(Type, Node),
     case has_container(Type, Node) of
         true ->
-            leo_ordning_reda:stack(Id, Object);
+            leo_ordning_reda_server:stack(Id, Object);
         false ->            
             {error, undefined}
     end.
@@ -119,9 +119,10 @@ start_app() ->
                 undefined ->
                     ?ETS_TAB_STACK_PID =
                         ets:new(?ETS_TAB_STACK_PID,
-                                [named_table, set, public, {read_concurrency, true}]);
+                                [named_table, set, public, {read_concurrency, true}]),
+                    ok;
                 _ ->
-                    void
+                    ok
             end;
         {error, {already_started, Module}} ->
             ok;

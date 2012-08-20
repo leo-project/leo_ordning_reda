@@ -19,7 +19,7 @@
 %% under the License.
 %%
 %%======================================================================
--module(leo_ordning_reda).
+-module(leo_ordning_reda_server).
 
 -author('Yosuke Hara').
 
@@ -31,14 +31,14 @@
 
 %% Application callbacks
 -export([start_link/3, stop/1]).
--export([stack/2]).
+-export([stack/2, send/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
          handle_info/2,
          terminate/2,
          code_change/3]).
--export([loop/3]).
+-export([loop/2]).
 
 -type(instance_name() :: atom()).
 -type(metadata()      :: binary()).
@@ -48,9 +48,11 @@
 
 -record(state, {id   :: atom(),
                 node :: atom(),
-                buf_size = 0 :: integer(),
-                timeout  = 0 :: integer(),
-                function     :: function()
+                buf_size = 0  :: integer(),
+                cur_size = 0  :: integer(),
+                stack    = [] :: list(),
+                timeout  = 0  :: integer(),
+                function      :: function()
                }).
 
 
@@ -80,6 +82,14 @@ stack(Id, Object) ->
     gen_server:call(Id, {stack, Object}).
 
 
+%% @doc
+%%
+-spec(send(atom()) ->
+             ok | {error, any()}).
+send(Id) ->
+    gen_server:call(Id, {send}).
+
+
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
@@ -92,20 +102,53 @@ init([Id, stack, #stack_info{node     = Node,
                              buf_size = BufSize,
                              timeout  = Timeout,
                              function = Function}]) ->
-    ?debugVal({Id, Node, BufSize, Timeout}),
     {ok, #state{id       = Id,
                 node     = Node,
                 buf_size = BufSize,
+                stack    = [],
                 timeout  = Timeout,
                 function = Function}}.
+
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
-handle_call({stack, Object}, _From, #state{id = Id} = State) ->
-    Reply = stack_fun0(Id, Object, State),
-    {reply, Reply, State}.
+handle_call({stack, Object}, _From, #state{id       = Id,
+                                           node     = _Node,
+                                           buf_size = BufSize,
+                                           function = _Fun} = State) ->
+    case stack_fun0(Id, Object, State) of
+        {ok, #state{cur_size = CurSize,
+                    stack    = _Stack} = NewState} when BufSize =< CurSize ->
+            ?debugVal(stack_and_send),
+            %% @TODO
+
+            garbage_collect(self()),
+            {reply, ok, NewState#state{cur_size = 0,
+                                       stack    = []}};
+        {ok, NewState} ->
+            ?debugVal(continue),
+            {reply, ok, NewState};
+        {error, _} = Error ->
+            {reply, Error, State}
+    end;
+
+
+handle_call({send}, _From, #state{node     = _Node,
+                                  function = _Fun,
+                                  cur_size = CurSize} = State) ->
+    case CurSize of
+        0 ->
+            {reply, ok, State};
+        _ ->
+            ?debugVal(send),
+            %% @TODO
+
+            garbage_collect(self()),
+            {reply, ok, State#state{cur_size = 0,
+                                    stack    = []}}
+    end.
 
 
 %% Function: handle_cast(Msg, State) -> {noreply, State}          |
@@ -143,78 +186,66 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Stack an object
 %%
 -spec(stack_fun0(instance_name(), {metadata(), object()}, #state{}) ->
-             ok | {error, any()}).
-stack_fun0(Id, Object, StackInfo) ->
+             {ok, #state{}} | {error, any()}).
+stack_fun0(Id, Object, State) ->
     case catch ets:lookup(?ETS_TAB_STACK_PID, Id) of
         {'EXIT', Cause} ->
             {error, Cause};
         [] ->
-            Pid = gen_instance(?ETS_TAB_STACK_PID, StackInfo),
+            #state{id = Id, timeout = Timeout} = State,
+            Pid = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
 
             case ets:insert(?ETS_TAB_STACK_PID, {Id, Pid}) of
                 true ->
-                    stack_fun1(Id, Pid, Object);
+                    stack_fun1(Id, Pid, Object, State);
                 {'EXIT', Cause} ->
                     {error, Cause}
             end;
         [{_, Pid}|_] ->
-            stack_fun1(Id, Pid, Object)
+            stack_fun1(Id, Pid, Object, State)
     end.
 
 %% @doc Append an object into the process.
 %%
--spec(stack_fun1(instance_name(), pid(), {metadata(), object()}) ->
-             ok | {error, any()}).
-stack_fun1(Id, Pid, Object) ->
+-spec(stack_fun1(instance_name(), pid(), {metadata(), object()}, #state{}) ->
+             {ok, #state{}} | {error, any()}).
+stack_fun1(Id, Pid, Object, #state{cur_size = CurSize,
+                                   stack    = Stack0} = State) ->
     case erlang:is_process_alive(Pid) of
         false ->
             catch ets:delete(?ETS_TAB_STACK_PID, Id),
-            stack(Id, Object);
+            stack_fun0(Id, Object, State);
+
         true ->
-            Pid ! {self(), append, Object},
+            Pid ! {self(), request},
             receive
-                Res ->
-                    Res
+                ok ->
+                    Stack1 = [Object|Stack0],
+                    Size   = byte_size(Object) + CurSize,
+                    {ok, State#state{cur_size = Size,
+                                     stack    = Stack1}}
             after
                 ?RCV_TIMEOUT ->
                     catch ets:delete(?ETS_TAB_STACK_PID, Id),
-                    stack(Id, Object)
+                    stack_fun0(Id, Object, State)
             end
     end.
 
 
 %% @doc
 %%
--spec(loop(#state{}, list(), integer()) ->
+-spec(loop(atom(), integer()) ->
              ok).
-loop(#state{node     = _Node,
-            buf_size = BufSize,
-            timeout  = Timeout,
-            function = _Function} = StackInfo, Acc0, Size0) ->
+loop(Id, Timeout) ->
     receive
-        {From, append, Object} ->
-            Acc1  = [Object|Acc0],
-            Size1 = byte_size(element(2, Object)) + Size0,
-
-            case (Size1 >= BufSize) of
-                true ->
-                    %% @TODO Execute a fun
-                    ?debugVal(Size1),
-                    From ! ok,
-
-                    purge_proc(self()),
-                    ok;
-                _ ->
-                    From ! ok,
-                    ?debugVal(length(Acc1)),
-                    loop(StackInfo, Acc1, Size1)
-            end
+        {From, request} ->
+            From ! ok,
+            loop(Id, Timeout)
     after
         Timeout ->
-            %% @TODO Execute a fun
             ?debugVal(Timeout),
-            purge_proc(self()),
-            ok
+            timer:apply_after(0, ?MODULE, send, [Id]),
+            purge_proc(self())
     end.
 
 
@@ -223,17 +254,16 @@ loop(#state{node     = _Node,
 -spec(purge_proc(pid()) ->
              ok).
 purge_proc(Pid) ->
-    exit(Pid, purge),
-    garbage_collect(),
-    ok.
+    garbage_collect(Pid),
+    exit(Pid, purge).
 
 
 %% @doc Create a process
 %%
--spec(gen_instance(pid_table(), #state{}) ->
+-spec(gen_instance(pid_table(), atom(), integer()) ->
              pid()).
-gen_instance(?ETS_TAB_STACK_PID, State) ->
-    spawn(?MODULE, loop, [State, [], 0]);
-gen_instance(?ETS_TAB_DIVIDE_PID,_) ->
+gen_instance(?ETS_TAB_STACK_PID, Id, Timeout) ->
+    spawn(?MODULE, loop, [Id, Timeout]);
+gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
     ok.
 
