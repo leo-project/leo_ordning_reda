@@ -29,7 +29,7 @@
 
 %% Application callbacks
 -export([start/0, add_container/3, remove_container/2, has_container/2,
-         stack/2]).
+         stack/3, stack/4]).
 
 -define(PREFIX, "leo_ordning_reda_").
 
@@ -91,15 +91,20 @@ has_container(stack = Type, Node) ->
 
 %% @doc Stack an object into the proc
 %%
--spec(stack(atom(), binary()) ->
+-spec(stack(atom(), string(),binary()) ->
              ok | {error, any()}).
-stack(Node, Object) ->
+stack(Node, Key, Object) ->
+    stack(Node, -1, Key, Object).
+
+-spec(stack(atom(), integer(), string(),binary()) ->
+             ok | {error, any()}).
+stack(Node, AddrId, Key, Object) ->
     Type = stack,
     Id = gen_id(Type, Node),
     case has_container(Type, Node) of
         true ->
-            leo_ordning_reda_server:stack(Id, Object);
-        false ->            
+            leo_ordning_reda_server:stack(Id, AddrId, Key, Object);
+        false ->
             {error, undefined}
     end.
 

@@ -33,6 +33,12 @@
 %%--------------------------------------------------------------------
 -ifdef(EUNIT).
 
+-define(BUF_SIZE, 10000).
+-define(TIMEOUT,  1000).
+-define(FUN_SEND, fun(_Node, _Stack) ->
+                          ok
+                  end).
+
 ordning_reda_test_() ->
     {foreach, fun setup/0, fun teardown/1,
      [{with, [T]} || T <- [fun stack_and_send_0_/1,
@@ -67,33 +73,34 @@ teardown(Node) ->
 stack_and_send_0_(Node) ->
     ok = leo_ordning_reda_api:add_container(
            stack, Node,
-           [{buffer_size, (1000*10)}, {timeout, 1000}, {function, undefined}]),
+           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
 
-    lists:foreach(fun(Obj) ->
-                          ok = leo_ordning_reda_api:stack(Node, Obj)
-                  end, [term_to_binary({<<"M0">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M1">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M2">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M3">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M4">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M5">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M6">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M7">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M8">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M9">>, crypto:rand_bytes(1024)})]),
+    lists:foreach(fun({Key, Obj}) ->
+                          ok = leo_ordning_reda_api:stack(Node, Key, Obj)
+                  end, [{"K0", term_to_binary({<<"M0">>, crypto:rand_bytes(1024)})},
+                        {"K1", term_to_binary({<<"M1">>, crypto:rand_bytes(1024)})},
+                        {"K2", term_to_binary({<<"M2">>, crypto:rand_bytes(1024)})},
+                        {"K3", term_to_binary({<<"M3">>, crypto:rand_bytes(1024)})},
+                        {"K4", term_to_binary({<<"M4">>, crypto:rand_bytes(1024)})},
+                        {"K5", term_to_binary({<<"M5">>, crypto:rand_bytes(1024)})},
+                        {"K6", term_to_binary({<<"M6">>, crypto:rand_bytes(1024)})},
+                        {"K7", term_to_binary({<<"M7">>, crypto:rand_bytes(1024)})},
+                        {"K8", term_to_binary({<<"M8">>, crypto:rand_bytes(1024)})},
+                        {"K9", term_to_binary({<<"M9">>, crypto:rand_bytes(1024)})}
+                       ]),
     ok.
 
 stack_and_send_1_(Node) ->
     ok = leo_ordning_reda_api:add_container(
            stack, Node,
-           [{buffer_size, (1000*10)}, {timeout, 1000}, {function, undefined}]),
+           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
 
-    lists:foreach(fun(Obj) ->
-                          timer:sleep(1000),
-                          ok = leo_ordning_reda_api:stack(Node, Obj)
-                  end, [term_to_binary({<<"M10">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M11">>, crypto:rand_bytes(1024)}),
-                        term_to_binary({<<"M12">>, crypto:rand_bytes(1024)})]),
+    lists:foreach(fun({Key, Obj}) ->
+                          ok = leo_ordning_reda_api:stack(Node, Key, Obj),
+                          timer:sleep(1000)
+                  end, [{"K10", term_to_binary({<<"M10">>, crypto:rand_bytes(1024)})},
+                        {"K11", term_to_binary({<<"M11">>, crypto:rand_bytes(1024)})}
+                       ]),
     ok.
 
 proper_(_) ->

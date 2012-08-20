@@ -31,7 +31,7 @@
 
 %% Application callbacks
 -export([start_link/3, stop/1]).
--export([stack/2, send/1]).
+-export([stack/4, send/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -41,16 +41,18 @@
 -export([loop/2]).
 
 -type(instance_name() :: atom()).
--type(metadata()      :: binary()).
--type(object()        :: binary()).
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
+-record(straw, {addr_id :: integer(),
+                key     :: string(),
+                object  :: binary()
+               }).
 
 -record(state, {id   :: atom(),
                 node :: atom(),
                 buf_size = 0  :: integer(),
                 cur_size = 0  :: integer(),
-                stack    = [] :: list(),
+                stack    = [] :: list(#straw{}),
                 timeout  = 0  :: integer(),
                 function      :: function()
                }).
@@ -76,10 +78,12 @@ stop(Id) ->
 
 %% @doc
 %%
--spec(stack(atom(), binary()) ->
+-spec(stack(atom(), integer(), string(), binary()) ->
              ok | {error, any()}).
-stack(Id, Object) ->
-    gen_server:call(Id, {stack, Object}).
+stack(Id, AddrId, Key, Obj) ->
+    gen_server:call(Id, {stack, #straw{addr_id = AddrId,
+                                       key     = Key,
+                                       object  = Obj}}).
 
 
 %% @doc
@@ -114,19 +118,17 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
-handle_call({stack, Object}, _From, #state{id       = Id,
-                                           node     = _Node,
-                                           buf_size = BufSize,
-                                           function = _Fun} = State) ->
-    case stack_fun0(Id, Object, State) of
+handle_call({stack, Straw}, _From, #state{id       = Id,
+                                          node     = Node,
+                                          buf_size = BufSize,
+                                          function = Fun} = State) ->
+    case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
-                    stack    = _Stack} = NewState} when BufSize =< CurSize ->
-            ?debugVal(stack_and_send),
-            %% @TODO
-
+                    stack    = Stack} = NewState} when BufSize =< CurSize ->
+            Reply = exec_fun(Fun, Node, Stack),
             garbage_collect(self()),
-            {reply, ok, NewState#state{cur_size = 0,
-                                       stack    = []}};
+            {reply, Reply, NewState#state{cur_size = 0,
+                                          stack    = []}};
         {ok, NewState} ->
             ?debugVal(continue),
             {reply, ok, NewState};
@@ -135,15 +137,15 @@ handle_call({stack, Object}, _From, #state{id       = Id,
     end;
 
 
-handle_call({send}, _From, #state{node     = _Node,
-                                  function = _Fun,
+handle_call({send}, _From, #state{node     = Node,
+                                  function = Fun,
                                   cur_size = CurSize} = State) ->
     case CurSize of
         0 ->
             {reply, ok, State};
         _ ->
-            ?debugVal(send),
-            %% @TODO
+            Reply = exec_fun(Fun, Node, State#state.stack),
+            ?debugVal(Reply),
 
             garbage_collect(self()),
             {reply, ok, State#state{cur_size = 0,
@@ -185,9 +187,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% @doc Stack an object
 %%
--spec(stack_fun0(instance_name(), {metadata(), object()}, #state{}) ->
+-spec(stack_fun0(instance_name(), #straw{}, #state{}) ->
              {ok, #state{}} | {error, any()}).
-stack_fun0(Id, Object, State) ->
+stack_fun0(Id, Straw, State) ->
     case catch ets:lookup(?ETS_TAB_STACK_PID, Id) of
         {'EXIT', Cause} ->
             {error, Cause};
@@ -197,37 +199,37 @@ stack_fun0(Id, Object, State) ->
 
             case ets:insert(?ETS_TAB_STACK_PID, {Id, Pid}) of
                 true ->
-                    stack_fun1(Id, Pid, Object, State);
+                    stack_fun1(Id, Pid, Straw, State);
                 {'EXIT', Cause} ->
                     {error, Cause}
             end;
         [{_, Pid}|_] ->
-            stack_fun1(Id, Pid, Object, State)
+            stack_fun1(Id, Pid, Straw, State)
     end.
 
 %% @doc Append an object into the process.
 %%
--spec(stack_fun1(instance_name(), pid(), {metadata(), object()}, #state{}) ->
+-spec(stack_fun1(instance_name(), pid(), #straw{}, #state{}) ->
              {ok, #state{}} | {error, any()}).
-stack_fun1(Id, Pid, Object, #state{cur_size = CurSize,
-                                   stack    = Stack0} = State) ->
+stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
+                                  stack    = Stack0} = State) ->
     case erlang:is_process_alive(Pid) of
         false ->
             catch ets:delete(?ETS_TAB_STACK_PID, Id),
-            stack_fun0(Id, Object, State);
+            stack_fun0(Id, Straw, State);
 
         true ->
             Pid ! {self(), request},
             receive
                 ok ->
-                    Stack1 = [Object|Stack0],
-                    Size   = byte_size(Object) + CurSize,
+                    Stack1 = [Straw|Stack0],
+                    Size   = byte_size(Straw#straw.object) + CurSize,
                     {ok, State#state{cur_size = Size,
                                      stack    = Stack1}}
             after
                 ?RCV_TIMEOUT ->
                     catch ets:delete(?ETS_TAB_STACK_PID, Id),
-                    stack_fun0(Id, Object, State)
+                    stack_fun0(Id, Straw, State)
             end
     end.
 
@@ -267,3 +269,19 @@ gen_instance(?ETS_TAB_STACK_PID, Id, Timeout) ->
 gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
     ok.
 
+
+%% @doc Execute a function
+%%
+-spec(exec_fun(function(), atom(), list()) ->
+             ok | {error, list()}).
+exec_fun(Fun, Node, Stack) ->
+    case Fun(Node, Stack) of
+        ok ->
+            ok;
+        {error, _Cause} ->
+            Errors = lists:map(fun(#straw{addr_id = AddrId,
+                                          key     = Key}) ->
+                                       {AddrId, Key}
+                               end, Stack),
+            {error, Errors}
+    end.
