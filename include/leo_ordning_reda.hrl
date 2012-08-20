@@ -35,4 +35,6 @@
           node         :: atom(),
           buf_size = 0 :: integer(),
           timeout  = 0 :: integer(),
-          function     :: function() }).
+          sender       :: function(),
+          recover      :: function()
+         }).

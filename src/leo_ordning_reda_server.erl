@@ -54,7 +54,8 @@
                 cur_size = 0  :: integer(),
                 stack    = [] :: list(#straw{}),
                 timeout  = 0  :: integer(),
-                function      :: function()
+                sender        :: function(),
+                recover       :: function()
                }).
 
 
@@ -105,13 +106,15 @@ send(Id) ->
 init([Id, stack, #stack_info{node     = Node,
                              buf_size = BufSize,
                              timeout  = Timeout,
-                             function = Function}]) ->
+                             sender   = Fun0,
+                             recover  = Fun1}]) ->
     {ok, #state{id       = Id,
                 node     = Node,
                 buf_size = BufSize,
                 stack    = [],
                 timeout  = Timeout,
-                function = Function}}.
+                sender   = Fun0,
+                recover  = Fun1}}.
 
 
 handle_call(stop, _From, State) ->
@@ -121,11 +124,14 @@ handle_call(stop, _From, State) ->
 handle_call({stack, Straw}, _From, #state{id       = Id,
                                           node     = Node,
                                           buf_size = BufSize,
-                                          function = Fun} = State) ->
+                                          sender   = Fun0,
+                                          recover  = Fun1} = State) ->
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
-            Reply = exec_fun(Fun, Node, Stack),
+            Reply = exec_fun(Fun0, Fun1, Node, Stack),
+            ?debugVal(Reply),
+
             garbage_collect(self()),
             {reply, Reply, NewState#state{cur_size = 0,
                                           stack    = []}};
@@ -137,13 +143,16 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
 
 
 handle_call({send}, _From, #state{node     = Node,
-                                  function = Fun,
+                                  sender   = Fun0,
+                                  recover  = Fun1,
                                   cur_size = CurSize} = State) ->
     case CurSize of
         0 ->
             {reply, ok, State};
         _ ->
-            Reply = exec_fun(Fun, Node, State#state.stack),
+            Reply = exec_fun(Fun0, Fun1, Node, State#state.stack),
+            ?debugVal(Reply),
+
             garbage_collect(self()),
             {reply, Reply, State#state{cur_size = 0,
                                        stack    = []}}
@@ -269,10 +278,10 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 
 %% @doc Execute a function
 %%
--spec(exec_fun(function(), atom(), list()) ->
+-spec(exec_fun(function(), function(), atom(), list()) ->
              ok | {error, list()}).
-exec_fun(Fun, Node, Stack) ->
-    case Fun(Node, Stack) of
+exec_fun(Fun0, Fun1, Node, Stack) ->
+    case Fun0(Node, Stack) of
         ok ->
             ?debugVal({send, Node}),
             ok;
@@ -281,5 +290,6 @@ exec_fun(Fun, Node, Stack) ->
                                           key     = Key}) ->
                                        {AddrId, Key}
                                end, Stack),
+            _ = Fun1(Errors),
             {error, Errors}
     end.
