@@ -130,7 +130,7 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
             Reply = exec_fun(Fun0, Fun1, Node, Stack),
-            ?debugVal(Reply),
+            %% ?debugVal(Reply),
 
             garbage_collect(self()),
             {reply, Reply, NewState#state{cur_size = 0,
@@ -151,7 +151,7 @@ handle_call({send}, _From, #state{node     = Node,
             {reply, ok, State};
         _ ->
             Reply = exec_fun(Fun0, Fun1, Node, State#state.stack),
-            ?debugVal(Reply),
+            %% ?debugVal(Reply),
 
             garbage_collect(self()),
             {reply, Reply, State#state{cur_size = 0,
@@ -251,7 +251,6 @@ loop(Id, Timeout) ->
             loop(Id, Timeout)
     after
         Timeout ->
-            ?debugVal(Timeout),
             timer:apply_after(0, ?MODULE, send, [Id]),
             purge_proc(self())
     end.
@@ -283,7 +282,7 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 exec_fun(Fun0, Fun1, Node, Stack) ->
     case Fun0(Node, Stack) of
         ok ->
-            ?debugVal({send, Node}),
+            %% ?debugVal({send, Node}),
             ok;
         {error, _Cause} ->
             Errors = lists:map(fun(#straw{addr_id = AddrId,
