@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -ifdef(EUNIT).
 
--define(BUF_SIZE, 10000).
+-define(BUF_SIZE, 5000).
 -define(TIMEOUT,  1000).
 -define(FUN_SEND, fun(_Node, _Stack) ->
                           ok
@@ -51,18 +51,20 @@ setup() ->
     [] = os:cmd("epmd -daemon"),
     {ok, Hostname} = inet:gethostname(),
 
-    Me = list_to_atom("test_0@" ++ Hostname),
+    Me = list_to_atom("me@" ++ Hostname),
     net_kernel:start([Me, shortnames]),
-    {ok, Node} = slave:start_link(list_to_atom(Hostname), 'node_0'),
+    {ok, Node0} = slave:start_link(list_to_atom(Hostname), 'node_0'),
+    {ok, Node1} = slave:start_link(list_to_atom(Hostname), 'node_1'),
 
     %% launch application
     ok = leo_ordning_reda_api:start(),
-    Node.
+    {Node0, Node1}.
 
-teardown(Node) ->
+teardown({Node0, Node1}) ->
     %% stop network
     net_kernel:stop(),
-    slave:stop(Node),
+    slave:stop(Node0),
+    slave:stop(Node1),
 
     %% stop application
     ok = leo_ordning_reda_sup:stop(),
@@ -70,36 +72,42 @@ teardown(Node) ->
     ok.
 
 
-stack_and_send_0_(Node) ->
+stack_and_send_0_({Node0, Node1}) ->
     ok = leo_ordning_reda_api:add_container(
-           stack, Node,
+           stack, Node0,
+           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
+    ok = leo_ordning_reda_api:add_container(
+           stack, Node1,
            [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
 
-    lists:foreach(fun({Key, Obj}) ->
-                          ok = leo_ordning_reda_api:stack(Node, Key, Obj)
-                  end, [{"K0", term_to_binary({<<"M0">>, crypto:rand_bytes(1024)})},
-                        {"K1", term_to_binary({<<"M1">>, crypto:rand_bytes(1024)})},
-                        {"K2", term_to_binary({<<"M2">>, crypto:rand_bytes(1024)})},
-                        {"K3", term_to_binary({<<"M3">>, crypto:rand_bytes(1024)})},
-                        {"K4", term_to_binary({<<"M4">>, crypto:rand_bytes(1024)})},
-                        {"K5", term_to_binary({<<"M5">>, crypto:rand_bytes(1024)})},
-                        {"K6", term_to_binary({<<"M6">>, crypto:rand_bytes(1024)})},
-                        {"K7", term_to_binary({<<"M7">>, crypto:rand_bytes(1024)})},
-                        {"K8", term_to_binary({<<"M8">>, crypto:rand_bytes(1024)})},
-                        {"K9", term_to_binary({<<"M9">>, crypto:rand_bytes(1024)})}
+    lists:foreach(fun({N, Key, Obj}) ->
+                          ok = leo_ordning_reda_api:stack(N, Key, Obj)
+                  end, [{Node0, "K0", term_to_binary({<<"M0">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K1", term_to_binary({<<"M1">>, crypto:rand_bytes(1024)})},
+                        {Node0, "K2", term_to_binary({<<"M2">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K3", term_to_binary({<<"M3">>, crypto:rand_bytes(1024)})},
+                        {Node0, "K4", term_to_binary({<<"M4">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K5", term_to_binary({<<"M5">>, crypto:rand_bytes(1024)})},
+                        {Node0, "K6", term_to_binary({<<"M6">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K7", term_to_binary({<<"M7">>, crypto:rand_bytes(1024)})},
+                        {Node0, "K8", term_to_binary({<<"M8">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K9", term_to_binary({<<"M9">>, crypto:rand_bytes(1024)})}
                        ]),
     ok.
 
-stack_and_send_1_(Node) ->
+stack_and_send_1_({Node0, Node1}) ->
     ok = leo_ordning_reda_api:add_container(
-           stack, Node,
+           stack, Node0,
+           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
+    ok = leo_ordning_reda_api:add_container(
+           stack, Node1,
            [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT}, {function, ?FUN_SEND}]),
 
-    lists:foreach(fun({Key, Obj}) ->
-                          ok = leo_ordning_reda_api:stack(Node, Key, Obj),
+    lists:foreach(fun({N, Key, Obj}) ->
+                          ok = leo_ordning_reda_api:stack(N, Key, Obj),
                           timer:sleep(1000)
-                  end, [{"K10", term_to_binary({<<"M10">>, crypto:rand_bytes(1024)})},
-                        {"K11", term_to_binary({<<"M11">>, crypto:rand_bytes(1024)})}
+                  end, [{Node0, "K10", term_to_binary({<<"M10">>, crypto:rand_bytes(1024)})},
+                        {Node1, "K11", term_to_binary({<<"M11">>, crypto:rand_bytes(1024)})}
                        ]),
     ok.
 

@@ -76,7 +76,7 @@ stop(Id) ->
     gen_server:call(Id, stop).
 
 
-%% @doc
+%% @doc Stacking objects
 %%
 -spec(stack(atom(), integer(), string(), binary()) ->
              ok | {error, any()}).
@@ -86,7 +86,7 @@ stack(Id, AddrId, Key, Obj) ->
                                        object  = Obj}}).
 
 
-%% @doc
+%% @doc Send stacked objects to remote-node(s).
 %%
 -spec(send(atom()) ->
              ok | {error, any()}).
@@ -130,7 +130,6 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
             {reply, Reply, NewState#state{cur_size = 0,
                                           stack    = []}};
         {ok, NewState} ->
-            ?debugVal(continue),
             {reply, ok, NewState};
         {error, _} = Error ->
             {reply, Error, State}
@@ -145,11 +144,9 @@ handle_call({send}, _From, #state{node     = Node,
             {reply, ok, State};
         _ ->
             Reply = exec_fun(Fun, Node, State#state.stack),
-            ?debugVal(Reply),
-
             garbage_collect(self()),
-            {reply, ok, State#state{cur_size = 0,
-                                    stack    = []}}
+            {reply, Reply, State#state{cur_size = 0,
+                                       stack    = []}}
     end.
 
 
@@ -277,6 +274,7 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 exec_fun(Fun, Node, Stack) ->
     case Fun(Node, Stack) of
         ok ->
+            ?debugVal({send, Node}),
             ok;
         {error, _Cause} ->
             Errors = lists:map(fun(#straw{addr_id = AddrId,
