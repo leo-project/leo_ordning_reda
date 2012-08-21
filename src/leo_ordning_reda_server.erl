@@ -43,11 +43,6 @@
 -type(instance_name() :: atom()).
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
--record(straw, {addr_id :: integer(),
-                key     :: string(),
-                object  :: binary()
-               }).
-
 -record(state, {id   :: atom(),
                 node :: atom(),
                 buf_size = 0  :: integer(),
@@ -79,7 +74,7 @@ stop(Id) ->
 
 %% @doc Stacking objects
 %%
--spec(stack(atom(), integer(), string(), binary()) ->
+-spec(stack(atom(), integer(), string(), any()) ->
              ok | {error, any()}).
 stack(Id, AddrId, Key, Obj) ->
     gen_server:call(Id, {stack, #straw{addr_id = AddrId,
@@ -130,7 +125,7 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
             Reply = exec_fun(Fun0, Fun1, Node, Stack),
-            %% ?debugVal(Reply),
+            %% ?debugVal({Id, BufSize, CurSize, length(Stack), Reply}),
 
             garbage_collect(self()),
             {reply, Reply, NewState#state{cur_size = 0,
@@ -151,7 +146,7 @@ handle_call({send}, _From, #state{node     = Node,
             {reply, ok, State};
         _ ->
             Reply = exec_fun(Fun0, Fun1, Node, State#state.stack),
-            %% ?debugVal(Reply),
+            %% ?debugVal({Node, Reply}),
 
             garbage_collect(self()),
             {reply, Reply, State#state{cur_size = 0,
@@ -230,6 +225,8 @@ stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
                 ok ->
                     Stack1 = [Straw|Stack0],
                     Size   = byte_size(Straw#straw.object) + CurSize,
+                    %% ?debugVal({Id, Size}),
+
                     {ok, State#state{cur_size = Size,
                                      stack    = Stack1}}
             after
@@ -282,7 +279,6 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 exec_fun(Fun0, Fun1, Node, Stack) ->
     case Fun0(Node, Stack) of
         ok ->
-            %% ?debugVal({send, Node}),
             ok;
         {error, _Cause} ->
             Errors = lists:map(fun(#straw{addr_id = AddrId,

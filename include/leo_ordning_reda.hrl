@@ -38,3 +38,9 @@
           sender       :: function(),
           recover      :: function()
          }).
+
+-record(straw, {addr_id :: integer(),
+                key     :: string(),
+                object  :: binary()
+               }).
+
