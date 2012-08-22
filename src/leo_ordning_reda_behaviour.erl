@@ -31,21 +31,13 @@
 
 behaviour_info(callbacks) ->
     [
-     %% init(Module::atom(), SizeOfStackedObj::integer(), StackingTimeout::integer) ->
-     %%     ok | {error, any()}
-     {init, 3},
-
-     %% stack(Node::atom(), Straw::#straw{}) ->
-     %%     ok | {error, any()}
-     {stack, 2},
-
      %% handle_send(Node::atom(), Stack::list(#straw{})) ->
      %%     ok | {error, list()}
      {handle_send, 2},
 
-     %% handle_fail(Errors::list(#straw{})) ->
+     %% handle_fail(Node::atom(), Errors::list(#straw{})) ->
      %%     ok | {error, any()}
-     {handle_fail, 1}
+     {handle_fail, 2}
     ];
 behaviour_info(_Other) ->
     undefined.

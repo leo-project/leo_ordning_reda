@@ -32,15 +32,14 @@
 
 
 -record(stack_info, {
-          node         :: atom(),
-          buf_size = 0 :: integer(),
-          timeout  = 0 :: integer(),
-          sender       :: function(),
-          recover      :: function()
+          node         :: atom(),    %% remote node
+          module       :: atom(),    %% callback module
+          buf_size = 0 :: integer(), %% buffer size
+          timeout  = 0 :: integer()  %% buffering timeout
          }).
 
--record(straw, {addr_id :: integer(),
-                key     :: string(),
-                object  :: binary()
+-record(straw, {addr_id :: integer(), %% ring address id
+                key     :: string(),  %% key (filename)
+                object  :: binary()   %% unstructured-data
                }).
 

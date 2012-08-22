@@ -43,14 +43,13 @@
 -type(instance_name() :: atom()).
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
--record(state, {id   :: atom(),
-                node :: atom(),
+-record(state, {id     :: atom(),
+                node   :: atom(),
+                module :: atom(), %% callback-mod
                 buf_size = 0  :: integer(),
                 cur_size = 0  :: integer(),
                 stack    = [] :: list(#straw{}),
-                timeout  = 0  :: integer(),
-                sender        :: function(),
-                recover       :: function()
+                timeout  = 0  :: integer()
                }).
 
 
@@ -99,17 +98,15 @@ send(Id) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 init([Id, stack, #stack_info{node     = Node,
+                             module   = Module,
                              buf_size = BufSize,
-                             timeout  = Timeout,
-                             sender   = Fun0,
-                             recover  = Fun1}]) ->
+                             timeout  = Timeout}]) ->
     {ok, #state{id       = Id,
                 node     = Node,
+                module   = Module,
                 buf_size = BufSize,
                 stack    = [],
-                timeout  = Timeout,
-                sender   = Fun0,
-                recover  = Fun1}}.
+                timeout  = Timeout}}.
 
 
 handle_call(stop, _From, State) ->
@@ -118,13 +115,12 @@ handle_call(stop, _From, State) ->
 
 handle_call({stack, Straw}, _From, #state{id       = Id,
                                           node     = Node,
-                                          buf_size = BufSize,
-                                          sender   = Fun0,
-                                          recover  = Fun1} = State) ->
+                                          module   = Module,
+                                          buf_size = BufSize} = State) ->
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
-            Reply = exec_fun(Fun0, Fun1, Node, Stack),
+            Reply = exec_fun(Module, Node, Stack),
             %% ?debugVal({Id, BufSize, CurSize, length(Stack), Reply}),
 
             garbage_collect(self()),
@@ -138,14 +134,13 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
 
 
 handle_call({send}, _From, #state{node     = Node,
-                                  sender   = Fun0,
-                                  recover  = Fun1,
+                                  module   = Module,
                                   cur_size = CurSize} = State) ->
     case CurSize of
         0 ->
             {reply, ok, State};
         _ ->
-            Reply = exec_fun(Fun0, Fun1, Node, State#state.stack),
+            Reply = exec_fun(Module, Node, State#state.stack),
             %% ?debugVal({Node, Reply}),
 
             garbage_collect(self()),
@@ -193,6 +188,9 @@ code_change(_OldVsn, State, _Extra) ->
 stack_fun0(Id, Straw, State) ->
     case catch ets:lookup(?ETS_TAB_STACK_PID, Id) of
         {'EXIT', Cause} ->
+            error_logger:error_msg("~p,~p,~p,~p~n",
+                                   [{module, ?MODULE_STRING}, {function, "stack_fun0/3"},
+                                    {line, ?LINE}, {body, Cause}]),
             {error, Cause};
         [] ->
             #state{id = Id, timeout = Timeout} = State,
@@ -202,6 +200,9 @@ stack_fun0(Id, Straw, State) ->
                 true ->
                     stack_fun1(Id, Pid, Straw, State);
                 {'EXIT', Cause} ->
+                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                           [{module, ?MODULE_STRING}, {function, "stack_fun0/3"},
+                                            {line, ?LINE}, {body, Cause}]),
                     {error, Cause}
             end;
         [{_, Pid}|_] ->
@@ -225,8 +226,6 @@ stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
                 ok ->
                     Stack1 = [Straw|Stack0],
                     Size   = byte_size(Straw#straw.object) + CurSize,
-                    %% ?debugVal({Id, Size}),
-
                     {ok, State#state{cur_size = Size,
                                      stack    = Stack1}}
             after
@@ -274,17 +273,29 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 
 %% @doc Execute a function
 %%
--spec(exec_fun(function(), function(), atom(), list()) ->
+-spec(exec_fun(atom(), atom(), list()) ->
              ok | {error, list()}).
-exec_fun(Fun0, Fun1, Node, Stack) ->
-    case Fun0(Node, Stack) of
+exec_fun(Module, Node, Stack) ->
+    case catch erlang:apply(Module, handle_send, [Node, Stack]) of
         ok ->
             ok;
-        {error, _Cause} ->
+        {_, Cause} ->
+            error_logger:error_msg("~p,~p,~p,~p~n",
+                                   [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
+                                    {line, ?LINE}, {body, Cause}]),
+
             Errors = lists:map(fun(#straw{addr_id = AddrId,
                                           key     = Key}) ->
                                        {AddrId, Key}
                                end, Stack),
-            _ = Fun1(Errors),
+            case catch erlang:apply(Module, handle_fail, [Node, Errors]) of
+                ok ->
+                    void;
+                {_, Cause} ->
+                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                           [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
+                                            {line, ?LINE}, {body, Cause}])
+            end,
             {error, Errors}
     end.
+
