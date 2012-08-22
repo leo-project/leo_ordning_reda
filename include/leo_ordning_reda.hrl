@@ -43,7 +43,7 @@
                }).
 
 -define(env_send_after_interval(),
-        case application:get_env(leo_ordning_redax, send_after_interval) of
+        case application:get_env(leo_ordning_reda, send_after_interval) of
             {ok, SendAfterInterval} -> SendAfterInterval;
             _ -> 100 %% 100msec
         end).
