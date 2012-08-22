@@ -120,6 +120,7 @@ handle_call({stack, Straw}, From, #state{id       = Id,
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
+            timer:sleep(?env_send_after_time()),
             spawn(fun() ->
                           exec_fun(From, Module, Node, Stack)
                   end),
@@ -278,7 +279,6 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 exec_fun(From, Module, Node, Stack) ->
     case catch erlang:apply(Module, handle_send, [Node, Stack]) of
         ok ->
-            timer:sleep(?env_send_after_time()),
             gen_server:reply(From, ok);
         {_, Cause} ->
             error_logger:error_msg("~p,~p,~p,~p~n",
