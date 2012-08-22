@@ -42,8 +42,8 @@
                 object  :: binary()   %% unstructured-data
                }).
 
--define(env_send_after_time(),
-        case application:get_env(leo_ordning_redax, send_after_time) of
-            {ok, SendAfterTime} -> SendAfterTime;
+-define(env_send_after_interval(),
+        case application:get_env(leo_ordning_redax, send_after_interval) of
+            {ok, SendAfterInterval} -> SendAfterInterval;
             _ -> 100 %% 100msec
         end).

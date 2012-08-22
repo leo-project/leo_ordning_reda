@@ -120,7 +120,7 @@ handle_call({stack, Straw}, From, #state{id       = Id,
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
-            timer:sleep(?env_send_after_time()),
+            timer:sleep(?env_send_after_interval()),
             spawn(fun() ->
                           exec_fun(From, Module, Node, Stack)
                   end),
