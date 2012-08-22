@@ -30,7 +30,6 @@
 -define(REQ_TIMEOUT,    10000). %% 10sec
 -define(RCV_TIMEOUT,     1000). %% 1sec
 
-
 -record(stack_info, {
           node         :: atom(),    %% remote node
           module       :: atom(),    %% callback module
@@ -43,3 +42,8 @@
                 object  :: binary()   %% unstructured-data
                }).
 
+-define(env_send_after_time(),
+        case application:get_env(leo_ordning_redax, send_after_time) of
+            {ok, SendAfterTime} -> SendAfterTime;
+            _ -> 100 %% 100msec
+        end).

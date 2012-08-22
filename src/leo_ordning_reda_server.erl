@@ -113,19 +113,19 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
-handle_call({stack, Straw}, _From, #state{id       = Id,
-                                          node     = Node,
-                                          module   = Module,
-                                          buf_size = BufSize} = State) ->
+handle_call({stack, Straw}, From, #state{id       = Id,
+                                         node     = Node,
+                                         module   = Module,
+                                         buf_size = BufSize} = State) ->
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
-            Reply = exec_fun(Module, Node, Stack),
-            %% ?debugVal({Id, BufSize, CurSize, length(Stack), Reply}),
-
+            spawn(fun() ->
+                          exec_fun(From, Module, Node, Stack)
+                  end),
             garbage_collect(self()),
-            {reply, Reply, NewState#state{cur_size = 0,
-                                          stack    = []}};
+            {noreply, NewState#state{cur_size = 0,
+                                     stack    = []}};
         {ok, NewState} ->
             {reply, ok, NewState};
         {error, _} = Error ->
@@ -133,19 +133,19 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
     end;
 
 
-handle_call({send}, _From, #state{node     = Node,
-                                  module   = Module,
-                                  cur_size = CurSize} = State) ->
+handle_call({send}, From, #state{node     = Node,
+                                 module   = Module,
+                                 cur_size = CurSize} = State) ->
     case CurSize of
         0 ->
             {reply, ok, State};
         _ ->
-            Reply = exec_fun(Module, Node, State#state.stack),
-            %% ?debugVal({Node, Reply}),
-
+            spawn(fun() ->
+                          exec_fun(From, Module, Node, State#state.stack)
+                  end),
             garbage_collect(self()),
-            {reply, Reply, State#state{cur_size = 0,
-                                       stack    = []}}
+            {noreply, State#state{cur_size = 0,
+                                  stack    = []}}
     end.
 
 
@@ -273,12 +273,13 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 
 %% @doc Execute a function
 %%
--spec(exec_fun(atom(), atom(), list()) ->
+-spec(exec_fun(pid(), atom(), atom(), list()) ->
              ok | {error, list()}).
-exec_fun(Module, Node, Stack) ->
+exec_fun(From, Module, Node, Stack) ->
     case catch erlang:apply(Module, handle_send, [Node, Stack]) of
         ok ->
-            ok;
+            timer:sleep(?env_send_after_time()),
+            gen_server:reply(From, ok);
         {_, Cause} ->
             error_logger:error_msg("~p,~p,~p,~p~n",
                                    [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
@@ -296,6 +297,6 @@ exec_fun(Module, Node, Stack) ->
                                            [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
                                             {line, ?LINE}, {body, Cause}])
             end,
-            {error, Errors}
+            gen_server:reply(From, {error, Errors})            
     end.
 
