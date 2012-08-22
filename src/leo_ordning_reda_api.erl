@@ -50,16 +50,14 @@ start() ->
              ok | {error, any()}).
 add_container(stack = Type, Node, Options) ->
     Id = gen_id(Type, Node),
-    BufSize  = proplists:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
-    Timeout  = proplists:get_value('timeout',     Options, ?REQ_TIMEOUT),
-    Fun0     = proplists:get_value('sender',      Options),
-    Fun1     = proplists:get_value('recover',     Options),
+    Module  = proplists:get_value('module',      Options),
+    BufSize = proplists:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
+    Timeout = proplists:get_value('timeout',     Options, ?REQ_TIMEOUT),
 
     Args = [Id, stack, #stack_info{node     = Node,
+                                   module   = Module,
                                    buf_size = BufSize,
-                                   timeout  = Timeout,
-                                   sender   = Fun0,
-                                   recover  = Fun1}],
+                                   timeout  = Timeout}],
     ChildSpec = {Id,
                  {leo_ordning_reda_server, start_link, Args},
                  permanent, 2000, worker, [leo_ordning_reda_server]},

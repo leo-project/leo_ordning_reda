@@ -18,28 +18,27 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
+%% ---------------------------------------------------------------------
+%% Leo Ordning & Reda  - Behaviour.
+%% @doc
+%% @end
 %%======================================================================
+-module(leo_ordning_reda_behaviour).
+
 -author('Yosuke Hara').
 
--define(ETS_TAB_STACK_INFO,  leo_ordning_reda_stack_info).
--define(ETS_TAB_STACK_PID,   leo_ordning_reda_stack_pid).
--define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
--define(ETS_TAB_DIVIDE_PID,  leo_ordning_reda_divide_pid).
+-export([behaviour_info/1]).
 
--define(DEF_BUF_SIZE, 1000000). %% about 1MB
--define(REQ_TIMEOUT,    10000). %% 10sec
--define(RCV_TIMEOUT,     1000). %% 1sec
+behaviour_info(callbacks) ->
+    [
+     %% handle_send(Node::atom(), Stack::list(#straw{})) ->
+     %%     ok | {error, list()}
+     {handle_send, 2},
 
-
--record(stack_info, {
-          node         :: atom(),    %% remote node
-          module       :: atom(),    %% callback module
-          buf_size = 0 :: integer(), %% buffer size
-          timeout  = 0 :: integer()  %% buffering timeout
-         }).
-
--record(straw, {addr_id :: integer(), %% ring address id
-                key     :: string(),  %% key (filename)
-                object  :: binary()   %% unstructured-data
-               }).
+     %% handle_fail(Node::atom(), Errors::list(#straw{})) ->
+     %%     ok | {error, any()}
+     {handle_fail, 2}
+    ];
+behaviour_info(_Other) ->
+    undefined.
 

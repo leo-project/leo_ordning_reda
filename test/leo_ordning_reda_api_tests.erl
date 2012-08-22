@@ -35,18 +35,6 @@
 
 -define(BUF_SIZE, 5000).
 -define(TIMEOUT,  1000).
--define(FUN_SEND_OK, fun(_Node, _Stack) ->
-                             ok
-                     end).
--define(FUN_SEND_ERROR, fun(_Node, _Stack) ->
-                                {error, nodedown}
-                        end).
--define(FUN_RECOVER, fun(_Errors) ->
-                             lists:foreach(fun(I) ->
-                                                   ?debugVal(I)
-                                           end, _Errors)
-                     end).
-
 
 ordning_reda_test_() ->
     {foreach, fun setup/0, fun teardown/1,
@@ -83,14 +71,8 @@ teardown({Node0, Node1}) ->
 
 
 stack_and_send_0_({Node0, Node1}) ->
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node0,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_OK},   {recover, ?FUN_RECOVER}]),
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node1,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_OK},   {recover, ?FUN_RECOVER}]),
+    ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, Key, Obj)
@@ -105,17 +87,13 @@ stack_and_send_0_({Node0, Node1}) ->
                         {Node0, "K8", term_to_binary({<<"M8">>, crypto:rand_bytes(1024)})},
                         {Node1, "K9", term_to_binary({<<"M9">>, crypto:rand_bytes(1024)})}
                        ]),
+    ok = leo_ordning_reda_stack:stop(Node0),
+    ok = leo_ordning_reda_stack:stop(Node1),
     ok.
 
 stack_and_send_1_({Node0, Node1}) ->
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node0,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_OK},   {recover, ?FUN_RECOVER}]),
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node1,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_OK},   {recover, ?FUN_RECOVER}]),
+    ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, Key, Obj),
@@ -123,17 +101,13 @@ stack_and_send_1_({Node0, Node1}) ->
                   end, [{Node0, "K10", term_to_binary({<<"M10">>, crypto:rand_bytes(1024)})},
                         {Node1, "K11", term_to_binary({<<"M11">>, crypto:rand_bytes(1024)})}
                        ]),
+    ok = leo_ordning_reda_stack:stop(Node0),
+    ok = leo_ordning_reda_stack:stop(Node1),
     ok.
 
 stack_and_send_2_({Node0, Node1}) ->
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node0,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_ERROR},{recover, ?FUN_RECOVER}]),
-    ok = leo_ordning_reda_api:add_container(
-           stack, Node1,
-           [{buffer_size, ?BUF_SIZE}, {timeout, ?TIMEOUT},
-            {sender, ?FUN_SEND_ERROR},{recover, ?FUN_RECOVER}]),
+    ok = leo_ordning_reda_stack_error:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    ok = leo_ordning_reda_stack_error:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, Key, Obj),
@@ -141,6 +115,8 @@ stack_and_send_2_({Node0, Node1}) ->
                   end, [{Node0, "K12", term_to_binary({<<"M12">>, crypto:rand_bytes(1024)})},
                         {Node1, "K13", term_to_binary({<<"M13">>, crypto:rand_bytes(1024)})}
                        ]),
+    ok = leo_ordning_reda_stack_error:stop(Node0),
+    ok = leo_ordning_reda_stack_error:stop(Node1),
     ok.
 
 proper_(_) ->
