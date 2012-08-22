@@ -31,7 +31,7 @@
 -define(RCV_TIMEOUT,     1000). %% 1sec
 
 -record(stack_info, {
-          node         :: atom(),    %% remote node
+          unit         :: atom(),    %% id of unit of stack
           module       :: atom(),    %% callback module
           buf_size = 0 :: integer(), %% buffer size
           timeout  = 0 :: integer()  %% buffering timeout

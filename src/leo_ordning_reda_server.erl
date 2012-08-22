@@ -44,7 +44,7 @@
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
 -record(state, {id     :: atom(),
-                node   :: atom(),
+                unit   :: atom(),
                 module :: atom(), %% callback-mod
                 buf_size = 0  :: integer(),
                 cur_size = 0  :: integer(),
@@ -97,12 +97,12 @@ send(Id) ->
 %%                         ignore               |
 %%                         {stop, Reason}
 %% Description: Initiates the server
-init([Id, stack, #stack_info{node     = Node,
+init([Id, stack, #stack_info{unit     = Unit,
                              module   = Module,
                              buf_size = BufSize,
                              timeout  = Timeout}]) ->
     {ok, #state{id       = Id,
-                node     = Node,
+                unit     = Unit,
                 module   = Module,
                 buf_size = BufSize,
                 stack    = [],
@@ -114,7 +114,7 @@ handle_call(stop, _From, State) ->
 
 
 handle_call({stack, Straw}, From, #state{id       = Id,
-                                         node     = Node,
+                                         unit     = Unit,
                                          module   = Module,
                                          buf_size = BufSize} = State) ->
     case stack_fun0(Id, Straw, State) of
@@ -122,7 +122,7 @@ handle_call({stack, Straw}, From, #state{id       = Id,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
             spawn(fun() ->
-                          exec_fun(From, Module, Node, Stack)
+                          exec_fun(From, Module, Unit, Stack)
                   end),
             garbage_collect(self()),
             {noreply, NewState#state{cur_size = 0,
@@ -134,7 +134,7 @@ handle_call({stack, Straw}, From, #state{id       = Id,
     end;
 
 
-handle_call({send}, From, #state{node     = Node,
+handle_call({send}, From, #state{unit     = Unit,
                                  module   = Module,
                                  cur_size = CurSize} = State) ->
     case CurSize of
@@ -142,7 +142,7 @@ handle_call({send}, From, #state{node     = Node,
             {reply, ok, State};
         _ ->
             spawn(fun() ->
-                          exec_fun(From, Module, Node, State#state.stack)
+                          exec_fun(From, Module, Unit, State#state.stack)
                   end),
             garbage_collect(self()),
             {noreply, State#state{cur_size = 0,
@@ -276,8 +276,8 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 %%
 -spec(exec_fun(pid(), atom(), atom(), list()) ->
              ok | {error, list()}).
-exec_fun(From, Module, Node, Stack) ->
-    case catch erlang:apply(Module, handle_send, [Node, Stack]) of
+exec_fun(From, Module, Unit, Stack) ->
+    case catch erlang:apply(Module, handle_send, [Unit, Stack]) of
         ok ->
             gen_server:reply(From, ok);
         {_, Cause} ->
@@ -289,7 +289,7 @@ exec_fun(From, Module, Node, Stack) ->
                                           key     = Key}) ->
                                        {AddrId, Key}
                                end, Stack),
-            case catch erlang:apply(Module, handle_fail, [Node, Errors]) of
+            case catch erlang:apply(Module, handle_fail, [Unit, Errors]) of
                 ok ->
                     void;
                 {_, Cause} ->
