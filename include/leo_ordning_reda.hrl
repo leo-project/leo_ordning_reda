@@ -26,13 +26,13 @@
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
 -define(ETS_TAB_DIVIDE_PID,  leo_ordning_reda_divide_pid).
 
+-define(DEF_REMOVED_TIME,   3). %% 3-times
 -define(DEF_BUF_SIZE, 1000000). %% about 1MB
 -define(REQ_TIMEOUT,    10000). %% 10sec
 -define(RCV_TIMEOUT,     1000). %% 1sec
 
-
 -record(stack_info, {
-          node         :: atom(),    %% remote node
+          unit         :: atom(),    %% id of unit of stack
           module       :: atom(),    %% callback module
           buf_size = 0 :: integer(), %% buffer size
           timeout  = 0 :: integer()  %% buffering timeout
@@ -43,3 +43,8 @@
                 object  :: binary()   %% unstructured-data
                }).
 
+-define(env_send_after_interval(),
+        case application:get_env(leo_ordning_reda, send_after_interval) of
+            {ok, SendAfterInterval} -> SendAfterInterval;
+            _ -> 100 %% 100msec
+        end).

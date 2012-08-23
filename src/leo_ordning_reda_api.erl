@@ -48,13 +48,13 @@ start() ->
 %%
 -spec(add_container(stack, atom(), list()) ->
              ok | {error, any()}).
-add_container(stack = Type, Node, Options) ->
-    Id = gen_id(Type, Node),
+add_container(stack = Type, Unit, Options) ->
+    Id = gen_id(Type, Unit),
     Module  = proplists:get_value('module',      Options),
     BufSize = proplists:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
     Timeout = proplists:get_value('timeout',     Options, ?REQ_TIMEOUT),
 
-    Args = [Id, stack, #stack_info{node     = Node,
+    Args = [Id, stack, #stack_info{unit     = Unit,
                                    module   = Module,
                                    buf_size = BufSize,
                                    timeout  = Timeout}],
@@ -74,8 +74,8 @@ add_container(stack = Type, Node, Options) ->
 %%
 -spec(remove_container(stack, atom()) ->
              ok | {error, any()}).
-remove_container(stack = Type, Node) ->
-    Id = gen_id(Type, Node),
+remove_container(stack = Type, Unit) ->
+    Id = gen_id(Type, Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
     catch supervisor:delete_child(leo_ordning_reda_sup, Id),
     ok.
@@ -85,23 +85,23 @@ remove_container(stack = Type, Node) ->
 %%
 -spec(has_container(stack, atom()) ->
              true | false).
-has_container(stack = Type, Node) ->
-    whereis(gen_id(Type, Node)) /= undefined.
+has_container(stack = Type, Unit) ->
+    whereis(gen_id(Type, Unit)) /= undefined.
 
 
 %% @doc Stack an object into the proc
 %%
 -spec(stack(atom(), string(),binary()) ->
              ok | {error, any()}).
-stack(Node, Key, Object) ->
-    stack(Node, -1, Key, Object).
+stack(Unit, Key, Object) ->
+    stack(Unit, -1, Key, Object).
 
 -spec(stack(atom(), integer(), string(),binary()) ->
              ok | {error, any()}).
-stack(Node, AddrId, Key, Object) ->
+stack(Unit, AddrId, Key, Object) ->
     Type = stack,
-    Id = gen_id(Type, Node),
-    case has_container(Type, Node) of
+    Id = gen_id(Type, Unit),
+    case has_container(Type, Unit) of
         true ->
             leo_ordning_reda_server:stack(Id, AddrId, Key, Object);
         false ->
@@ -140,8 +140,12 @@ start_app() ->
 %%
 -spec(gen_id(stack, atom()) ->
              string()).
-gen_id(Type, Node) ->
+gen_id(Type, Unit0) ->
+    Unit1 = case is_atom(Unit0) of
+                true  -> atom_to_list(Unit0);
+                false -> Unit0
+            end,
     list_to_atom(
       lists:append(
-        [?PREFIX, atom_to_list(Type), "_", atom_to_list(Node)])).
+        [?PREFIX, atom_to_list(Type), "_", Unit1])).
 

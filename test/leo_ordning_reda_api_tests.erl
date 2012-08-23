@@ -75,7 +75,7 @@ stack_and_send_0_({Node0, Node1}) ->
     ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
 
     lists:foreach(fun({N, Key, Obj}) ->
-                          ok = leo_ordning_reda_api:stack(N, Key, Obj)
+                          ok  = leo_ordning_reda_api:stack(N, Key, Obj)
                   end, [{Node0, "K0", term_to_binary({<<"M0">>, crypto:rand_bytes(1024)})},
                         {Node1, "K1", term_to_binary({<<"M1">>, crypto:rand_bytes(1024)})},
                         {Node0, "K2", term_to_binary({<<"M2">>, crypto:rand_bytes(1024)})},

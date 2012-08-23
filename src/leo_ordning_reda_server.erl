@@ -31,7 +31,7 @@
 
 %% Application callbacks
 -export([start_link/3, stop/1]).
--export([stack/4, send/1]).
+-export([stack/4, exec/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -44,12 +44,13 @@
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
 -record(state, {id     :: atom(),
-                node   :: atom(),
+                unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size = 0  :: integer(),
-                cur_size = 0  :: integer(),
-                stack    = [] :: list(#straw{}),
-                timeout  = 0  :: integer()
+                buf_size = 0  :: integer(),      %% size of buffer
+                cur_size = 0  :: integer(),      %% size of current stacked objects
+                stack    = [] :: list(#straw{}), %% list of stacked objects
+                timeout  = 0  :: integer(),      %% stacking timeout
+                times    = 0  :: integer()       %% NOT execution times
                }).
 
 
@@ -83,10 +84,10 @@ stack(Id, AddrId, Key, Obj) ->
 
 %% @doc Send stacked objects to remote-node(s).
 %%
--spec(send(atom()) ->
+-spec(exec(atom()) ->
              ok | {error, any()}).
-send(Id) ->
-    gen_server:call(Id, {send}).
+exec(Id) ->
+    gen_server:call(Id, {exec}).
 
 
 %%====================================================================
@@ -97,12 +98,13 @@ send(Id) ->
 %%                         ignore               |
 %%                         {stop, Reason}
 %% Description: Initiates the server
-init([Id, stack, #stack_info{node     = Node,
+init([Id, stack, #stack_info{unit     = Unit,
                              module   = Module,
                              buf_size = BufSize,
                              timeout  = Timeout}]) ->
+    _Pid = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
     {ok, #state{id       = Id,
-                node     = Node,
+                unit     = Unit,
                 module   = Module,
                 buf_size = BufSize,
                 stack    = [],
@@ -113,19 +115,20 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
-handle_call({stack, Straw}, _From, #state{id       = Id,
-                                          node     = Node,
-                                          module   = Module,
-                                          buf_size = BufSize} = State) ->
+handle_call({stack, Straw}, From, #state{id       = Id,
+                                         unit     = Unit,
+                                         module   = Module,
+                                         buf_size = BufSize} = State) ->
     case stack_fun0(Id, Straw, State) of
         {ok, #state{cur_size = CurSize,
                     stack    = Stack} = NewState} when BufSize =< CurSize ->
-            Reply = exec_fun(Module, Node, Stack),
-            %% ?debugVal({Id, BufSize, CurSize, length(Stack), Reply}),
-
+            timer:sleep(?env_send_after_interval()),
+            spawn(fun() ->
+                          exec_fun(From, Module, Unit, Stack)
+                  end),
             garbage_collect(self()),
-            {reply, Reply, NewState#state{cur_size = 0,
-                                          stack    = []}};
+            {noreply, NewState#state{cur_size = 0,
+                                     stack    = []}};
         {ok, NewState} ->
             {reply, ok, NewState};
         {error, _} = Error ->
@@ -133,19 +136,28 @@ handle_call({stack, Straw}, _From, #state{id       = Id,
     end;
 
 
-handle_call({send}, _From, #state{node     = Node,
-                                  module   = Module,
-                                  cur_size = CurSize} = State) ->
+handle_call({exec}, From, #state{id       = Id,
+                                 unit     = Unit,
+                                 module   = Module,
+                                 cur_size = CurSize,
+                                 timeout  = Timeout,
+                                 times    = Times} = State) ->
     case CurSize of
-        0 ->
+        0 when Times >= (?DEF_REMOVED_TIME + 1) ->
+            timer:apply_after(
+              0, leo_ordning_reda_api, remove_container, [stack, Unit]),
             {reply, ok, State};
+        0 ->
+            _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
+            {reply, ok, State#state{times = Times+1}};
         _ ->
-            Reply = exec_fun(Module, Node, State#state.stack),
-            %% ?debugVal({Node, Reply}),
-
+            spawn(fun() ->
+                          exec_fun(From, Module, Unit, State#state.stack)
+                  end),
             garbage_collect(self()),
-            {reply, Reply, State#state{cur_size = 0,
-                                       stack    = []}}
+            _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
+            {noreply, State#state{cur_size = 0,
+                                  stack    = []}}
     end.
 
 
@@ -247,7 +259,7 @@ loop(Id, Timeout) ->
             loop(Id, Timeout)
     after
         Timeout ->
-            timer:apply_after(0, ?MODULE, send, [Id]),
+            timer:apply_after(0, ?MODULE, exec, [Id]),
             purge_proc(self())
     end.
 
@@ -273,12 +285,12 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 
 %% @doc Execute a function
 %%
--spec(exec_fun(atom(), atom(), list()) ->
+-spec(exec_fun(pid(), atom(), atom(), list()) ->
              ok | {error, list()}).
-exec_fun(Module, Node, Stack) ->
-    case catch erlang:apply(Module, handle_send, [Node, Stack]) of
+exec_fun(From, Module, Unit, Stack) ->
+    case catch erlang:apply(Module, handle_send, [Unit, Stack]) of
         ok ->
-            ok;
+            gen_server:reply(From, ok);
         {_, Cause} ->
             error_logger:error_msg("~p,~p,~p,~p~n",
                                    [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
@@ -288,7 +300,7 @@ exec_fun(Module, Node, Stack) ->
                                           key     = Key}) ->
                                        {AddrId, Key}
                                end, Stack),
-            case catch erlang:apply(Module, handle_fail, [Node, Errors]) of
+            case catch erlang:apply(Module, handle_fail, [Unit, Errors]) of
                 ok ->
                     void;
                 {_, Cause} ->
@@ -296,6 +308,6 @@ exec_fun(Module, Node, Stack) ->
                                            [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
                                             {line, ?LINE}, {body, Cause}])
             end,
-            {error, Errors}
+            gen_server:reply(From, {error, Errors})
     end.
 
