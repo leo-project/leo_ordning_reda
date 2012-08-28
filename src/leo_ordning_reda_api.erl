@@ -98,12 +98,12 @@ has_container(stack = Type, Unit) ->
 
 %% @doc Stack an object into the proc
 %%
--spec(stack(atom(), string(),binary()) ->
+-spec(stack(atom(), string(), binary()) ->
              ok | {error, any()}).
 stack(Unit, Key, Object) ->
     stack(Unit, -1, Key, Object).
 
--spec(stack(atom(), integer(), string(),binary()) ->
+-spec(stack(atom(), integer(), string(), binary()) ->
              ok | {error, any()}).
 stack(Unit, AddrId, Key, Object) ->
     Type = stack,
