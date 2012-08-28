@@ -40,8 +40,7 @@ ordning_reda_test_() ->
     {foreach, fun setup/0, fun teardown/1,
      [{with, [T]} || T <- [fun stack_and_send_0_/1,
                            fun stack_and_send_1_/1,
-                           fun stack_and_send_2_/1,
-                           fun proper_/1
+                           fun stack_and_send_2_/1
                           ]]}.
 
 setup() ->
@@ -121,7 +120,9 @@ stack_and_send_2_({Node0, Node1}) ->
     ok = leo_ordning_reda_stack_error:stop(Node1),
     ok.
 
-proper_(_) ->
-    ok.
+
+proper_test_() ->
+    ?debugVal(ok),
+    {timeout, 60000, ?_assertEqual([], proper:module(leo_ordning_reda_api_prop))}.
 
 -endif.
