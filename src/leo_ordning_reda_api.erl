@@ -64,6 +64,9 @@ add_container(stack = Type, Unit, Options) ->
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, _Pid} ->
+            error_logger:info_msg("~p,~p,~p,~p~n",
+                                  [{module, ?MODULE_STRING}, {function, "add_container/3"},
+                                   {line, ?LINE}, {body, {Unit, Options}}]),
             ok;
         {error, Cause} ->
             {error, Cause}
@@ -78,6 +81,10 @@ remove_container(stack = Type, Unit) ->
     Id = gen_id(Type, Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
     catch supervisor:delete_child(leo_ordning_reda_sup, Id),
+
+    error_logger:info_msg("~p,~p,~p,~p~n",
+                          [{module, ?MODULE_STRING}, {function, "remove_container/2"},
+                           {line, ?LINE}, {body, Unit}]),
     ok.
 
 
@@ -91,12 +98,12 @@ has_container(stack = Type, Unit) ->
 
 %% @doc Stack an object into the proc
 %%
--spec(stack(atom(), string(),binary()) ->
+-spec(stack(atom(), string(), binary()) ->
              ok | {error, any()}).
 stack(Unit, Key, Object) ->
     stack(Unit, -1, Key, Object).
 
--spec(stack(atom(), integer(), string(),binary()) ->
+-spec(stack(atom(), integer(), string(), binary()) ->
              ok | {error, any()}).
 stack(Unit, AddrId, Key, Object) ->
     Type = stack,

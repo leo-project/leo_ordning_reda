@@ -74,7 +74,7 @@ stop(Id) ->
 
 %% @doc Stacking objects
 %%
--spec(stack(atom(), integer(), string(), any()) ->
+-spec(stack(atom(), integer(), string(), tuple({any(), binary()})) ->
              ok | {error, any()}).
 stack(Id, AddrId, Key, Obj) ->
     gen_server:call(Id, {stack, #straw{addr_id = AddrId,
@@ -231,15 +231,21 @@ stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
         false ->
             catch ets:delete(?ETS_TAB_STACK_PID, Id),
             stack_fun0(Id, Straw, State);
-
         true ->
             Pid ! {self(), request},
             receive
                 ok ->
-                    Stack1 = [Straw|Stack0],
-                    Size   = byte_size(Straw#straw.object) + CurSize,
-                    {ok, State#state{cur_size = Size,
-                                     stack    = Stack1}}
+                    List = [Key || #straw{key = Key} <- Stack0],
+
+                    case lists:member(Straw#straw.key, List) of
+                        true ->
+                            {ok, State};
+                        false ->
+                            Stack1 = [Straw|Stack0],
+                            Size   = byte_size(element(2, Straw#straw.object)) + CurSize,
+                            {ok, State#state{cur_size = Size,
+                                             stack    = Stack1}}
+                    end
             after
                 ?RCV_TIMEOUT ->
                     catch ets:delete(?ETS_TAB_STACK_PID, Id),
