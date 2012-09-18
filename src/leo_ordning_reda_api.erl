@@ -50,9 +50,9 @@ start() ->
              ok | {error, any()}).
 add_container(stack = Type, Unit, Options) ->
     Id = gen_id(Type, Unit),
-    Module  = proplists:get_value('module',      Options),
-    BufSize = proplists:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
-    Timeout = proplists:get_value('timeout',     Options, ?REQ_TIMEOUT),
+    Module  = leo_misc:get_value('module',      Options),
+    BufSize = leo_misc:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
+    Timeout = leo_misc:get_value('timeout',     Options, ?REQ_TIMEOUT),
 
     Args = [Id, stack, #stack_info{unit     = Unit,
                                    module   = Module,
