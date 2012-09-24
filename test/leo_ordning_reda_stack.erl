@@ -61,7 +61,7 @@ stop(Node) ->
 %% @doc
 %%
 handle_send(_Node, _StackedObjects) ->
-    ?debugVal({_Node, length(_StackedObjects)}),
+    ?debugVal({_Node, byte_size(_StackedObjects)}),
     ok.
 
 
