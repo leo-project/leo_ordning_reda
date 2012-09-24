@@ -40,7 +40,8 @@
 
 -record(straw, {addr_id :: integer(), %% ring address id
                 key     :: string(),  %% key (filename)
-                object  :: binary()   %% unstructured-data
+                object  :: binary(),  %% unstructured-data
+                size    :: integer()  %% object-size
                }).
 
 -define(env_send_after_interval(),

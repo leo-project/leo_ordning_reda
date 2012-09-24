@@ -46,11 +46,12 @@
 -record(state, {id     :: atom(),
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size = 0  :: integer(),      %% size of buffer
-                cur_size = 0  :: integer(),      %% size of current stacked objects
-                stack    = [] :: list(#straw{}), %% list of stacked objects
-                timeout  = 0  :: integer(),      %% stacking timeout
-                times    = 0  :: integer()       %% NOT execution times
+                buf_size   = 0  :: integer(),      %% size of buffer
+                cur_size   = 0  :: integer(),      %% size of current stacked objects
+                stack_obj  = [] :: list(binary()), %% list of stacked objects
+                stack_info = [] :: list(),         %% list of stacked object-info
+                timeout    = 0  :: integer(),      %% stacking timeout
+                times      = 0  :: integer()       %% NOT execution times
                }).
 
 
@@ -79,7 +80,8 @@ stop(Id) ->
 stack(Id, AddrId, Key, Obj) ->
     gen_server:call(Id, {stack, #straw{addr_id = AddrId,
                                        key     = Key,
-                                       object  = Obj}}).
+                                       object  = Obj,
+                                       size    = byte_size(Obj)}}).
 
 
 %% @doc Send stacked objects to remote-node(s).
@@ -107,7 +109,6 @@ init([Id, stack, #stack_info{unit     = Unit,
                 unit     = Unit,
                 module   = Module,
                 buf_size = BufSize,
-                stack    = [],
                 timeout  = Timeout}}.
 
 
@@ -120,15 +121,17 @@ handle_call({stack, Straw}, From, #state{id       = Id,
                                          module   = Module,
                                          buf_size = BufSize} = State) ->
     case stack_fun0(Id, Straw, State) of
-        {ok, #state{cur_size = CurSize,
-                    stack    = Stack} = NewState} when BufSize =< CurSize ->
+        {ok, #state{cur_size   = CurSize,
+                    stack_obj  = StackObj,
+                    stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
             spawn(fun() ->
-                          exec_fun(From, Module, Unit, Stack)
+                          exec_fun(From, Module, Unit, StackObj, StackInfo)
                   end),
             garbage_collect(self()),
-            {noreply, NewState#state{cur_size = 0,
-                                     stack    = []}};
+            {noreply, NewState#state{cur_size   = 0,
+                                     stack_obj  = [],
+                                     stack_info = []}};
         {ok, NewState} ->
             {reply, ok, NewState};
         {error, _} = Error ->
@@ -152,12 +155,13 @@ handle_call({exec}, From, #state{id       = Id,
             {reply, ok, State#state{times = Times+1}};
         _ ->
             spawn(fun() ->
-                          exec_fun(From, Module, Unit, State#state.stack)
+                          exec_fun(From, Module, Unit, State#state.stack_obj, State#state.stack_info)
                   end),
             garbage_collect(self()),
             _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
-            {noreply, State#state{cur_size = 0,
-                                  stack    = []}}
+            {noreply, State#state{cur_size   = 0,
+                                  stack_obj  = [],
+                                  stack_info = []}}
     end.
 
 
@@ -225,8 +229,9 @@ stack_fun0(Id, Straw, State) ->
 %%
 -spec(stack_fun1(instance_name(), pid(), #straw{}, #state{}) ->
              {ok, #state{}} | {error, any()}).
-stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
-                                  stack    = Stack0} = State) ->
+stack_fun1(Id, Pid, Straw, #state{cur_size   = CurSize,
+                                  stack_obj  = StackObj0,
+                                  stack_info = StackInf0} = State) ->
     case erlang:is_process_alive(Pid) of
         false ->
             catch ets:delete(?ETS_TAB_STACK_PID, Id),
@@ -235,16 +240,19 @@ stack_fun1(Id, Pid, Straw, #state{cur_size = CurSize,
             Pid ! {self(), request},
             receive
                 ok ->
-                    List = [Key || #straw{key = Key} <- Stack0],
+                    List = [Key || {_, Key} <- StackInf0],
 
                     case lists:member(Straw#straw.key, List) of
                         true ->
                             {ok, State};
                         false ->
-                            Stack1 = [Straw|Stack0],
-                            Size   = byte_size(element(2, Straw#straw.object)) + CurSize,
-                            {ok, State#state{cur_size = Size,
-                                             stack    = Stack1}}
+                            StackObj1 = [Straw#straw.object | StackObj0],
+                            StackInf1 = [{Straw#straw.addr_id,
+                                          Straw#straw.key}  | StackInf0],
+                            Size   = Straw#straw.size + CurSize,
+                            {ok, State#state{cur_size   = Size,
+                                             stack_obj  = StackObj1,
+                                             stack_info = StackInf1}}
                     end
             after
                 ?RCV_TIMEOUT ->
@@ -291,29 +299,33 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 
 %% @doc Execute a function
 %%
--spec(exec_fun(pid(), atom(), atom(), list()) ->
+-spec(exec_fun(pid(), atom(), atom(), list(), list()) ->
              ok | {error, list()}).
-exec_fun(From, Module, Unit, Stack) ->
-    case catch erlang:apply(Module, handle_send, [Unit, Stack]) of
-        ok ->
-            gen_server:reply(From, ok);
-        {_, Cause} ->
-            error_logger:error_msg("~p,~p,~p,~p~n",
-                                   [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
-                                    {line, ?LINE}, {body, Cause}]),
-
-            Errors = lists:map(fun(#straw{addr_id = AddrId,
-                                          key     = Key}) ->
-                                       {AddrId, Key}
-                               end, Stack),
-            case catch erlang:apply(Module, handle_fail, [Unit, Errors]) of
+exec_fun(From, Module, Unit, StackObj, StackInf) ->
+    %% Compress object-list
+    %%
+    case catch snappy:compress(StackObj) of
+        {ok, CompressedObjs} ->
+            %% Send compressed objects
+            %%
+            case catch erlang:apply(Module, handle_send, [Unit, CompressedObjs]) of
                 ok ->
-                    void;
+                    gen_server:reply(From, ok);
                 {_, Cause} ->
                     error_logger:error_msg("~p,~p,~p,~p~n",
                                            [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
-                                            {line, ?LINE}, {body, Cause}])
-            end,
-            gen_server:reply(From, {error, Errors})
+                                            {line, ?LINE}, {body, Cause}]),
+                    case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
+                        ok ->
+                            void;
+                        {_, Cause} ->
+                            error_logger:error_msg("~p,~p,~p,~p~n",
+                                                   [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
+                                                    {line, ?LINE}, {body, Cause}])
+                    end,
+                    gen_server:reply(From, {error, StackInf})
+            end;
+        {_, Cause} ->
+            gen_server:reply(From, {error, Cause})
     end.
 
