@@ -46,12 +46,12 @@
 -record(state, {id     :: atom(),
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size   = 0  :: integer(),      %% size of buffer
-                cur_size   = 0  :: integer(),      %% size of current stacked objects
-                stack_obj  = [] :: list(binary()), %% list of stacked objects
-                stack_info = [] :: list(),         %% list of stacked object-info
-                timeout    = 0  :: integer(),      %% stacking timeout
-                times      = 0  :: integer()       %% NOT execution times
+                buf_size = 0     :: integer(), %% size of buffer
+                cur_size = 0     :: integer(), %% size of current stacked objects
+                stack_obj = <<>> :: binary(),  %% stacked objects
+                stack_info = []  :: list(),    %% list of stacked object-info
+                timeout = 0      :: integer(), %% stacking timeout
+                times   = 0      :: integer()  %% NOT execution times
                }).
 
 
@@ -130,7 +130,7 @@ handle_call({stack, Straw}, From, #state{id       = Id,
                   end),
             garbage_collect(self()),
             {noreply, NewState#state{cur_size   = 0,
-                                     stack_obj  = [],
+                                     stack_obj  = <<>>,
                                      stack_info = []}};
         {ok, NewState} ->
             {reply, ok, NewState};
@@ -160,7 +160,7 @@ handle_call({exec}, From, #state{id       = Id,
             garbage_collect(self()),
             _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
             {noreply, State#state{cur_size   = 0,
-                                  stack_obj  = [],
+                                  stack_obj  = <<>>,
                                   stack_info = []}}
     end.
 
@@ -246,7 +246,8 @@ stack_fun1(Id, Pid, Straw, #state{cur_size   = CurSize,
                         true ->
                             {ok, State};
                         false ->
-                            StackObj1 = [Straw#straw.object | StackObj0],
+                            Bin = Straw#straw.object,
+                            StackObj1 = << StackObj0/binary,  Bin/binary>>,
                             StackInf1 = [{Straw#straw.addr_id,
                                           Straw#straw.key}  | StackInf0],
                             Size   = Straw#straw.size + CurSize,
@@ -304,7 +305,7 @@ gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
 exec_fun(From, Module, Unit, StackObj, StackInf) ->
     %% Compress object-list
     %%
-    case catch snappy:compress(StackObj) of
+    case catch lz4:pack(StackObj) of
         {ok, CompressedObjs} ->
             %% Send compressed objects
             %%
