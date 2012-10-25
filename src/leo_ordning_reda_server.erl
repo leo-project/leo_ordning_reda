@@ -319,14 +319,16 @@ exec_fun(From, Module, Unit, StackObj, StackInf) ->
                     case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
                         ok ->
                             void;
-                        {_, Cause} ->
+                        {_, Cause0} ->
+                            Cause1 = element(1, Cause0),
                             error_logger:error_msg("~p,~p,~p,~p~n",
                                                    [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
-                                                    {line, ?LINE}, {body, Cause}])
+                                                    {line, ?LINE}, {body, Cause1}])
                     end,
                     gen_server:reply(From, {error, StackInf})
             end;
-        {_, Cause} ->
-            gen_server:reply(From, {error, Cause})
+        {_, Cause0} ->
+            Cause1 = element(1, Cause0),
+            gen_server:reply(From, {error, Cause1})
     end.
 
