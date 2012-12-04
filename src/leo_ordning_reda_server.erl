@@ -43,6 +43,8 @@
 -type(instance_name() :: atom()).
 -type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
+-define(DEF_TIMEOUT, 30000).
+
 -record(state, {id     :: atom(),
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
@@ -70,7 +72,7 @@ start_link(Id, stack, StackInfo) ->
 %%
 -spec(stop(atom()) -> ok).
 stop(Id) ->
-    gen_server:call(Id, stop).
+    gen_server:call(Id, stop, ?DEF_TIMEOUT).
 
 
 %% @doc Stacking objects
@@ -81,7 +83,7 @@ stack(Id, AddrId, Key, Obj) ->
     gen_server:call(Id, {stack, #straw{addr_id = AddrId,
                                        key     = Key,
                                        object  = Obj,
-                                       size    = byte_size(Obj)}}).
+                                       size    = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
@@ -89,7 +91,7 @@ stack(Id, AddrId, Key, Obj) ->
 -spec(exec(atom()) ->
              ok | {error, any()}).
 exec(Id) ->
-    gen_server:call(Id, {exec}).
+    gen_server:call(Id, {exec}, ?DEF_TIMEOUT).
 
 
 %%====================================================================
