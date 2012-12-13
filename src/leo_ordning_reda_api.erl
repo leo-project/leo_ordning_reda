@@ -60,7 +60,7 @@ add_container(stack = Type, Unit, Options) ->
                                    timeout  = Timeout}],
     ChildSpec = {Id,
                  {leo_ordning_reda_server, start_link, Args},
-                 permanent, 2000, worker, [leo_ordning_reda_server]},
+                 temporary, 2000, worker, [leo_ordning_reda_server]},
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, _Pid} ->
