@@ -20,6 +20,7 @@
 %%
 %%======================================================================
 -module(leo_ordning_reda_sup).
+-author('Yosuke Hara').
 
 -behaviour(supervisor).
 
@@ -61,4 +62,3 @@ stop() ->
 %% @private
 init([]) ->
     {ok, {{one_for_one, 5, 60}, []}}.
-

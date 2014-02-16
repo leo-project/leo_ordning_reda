@@ -73,9 +73,7 @@ prop_stack() ->
 
                         {H,S,Res} = run_commands(?MODULE, Cmds),
 
-                        ok = leo_ordning_reda_stack:stop(?UNIT),
                         application:stop(leo_ordning_reda),
-
                         ?WHENFAIL(
                            io:format("History: ~p\nState: ~p\nRes: ~p\n", [H,S,Res]),
                            collect(Type, Res =:= ok))

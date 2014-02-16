@@ -34,7 +34,7 @@
 -ifdef(EUNIT).
 
 -define(BUF_SIZE, 5000).
--define(TIMEOUT,  1000).
+-define(TIMEOUT,   500).
 
 ordning_reda_test_() ->
     {foreach, fun setup/0, fun teardown/1,
@@ -74,7 +74,6 @@ stack_and_send_0_({Node0, Node1}) ->
     ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
 
     lists:foreach(fun({N, Key, Obj}) ->
-                          ?debugVal({N, Key}),
                           ok  = leo_ordning_reda_api:stack(N, Key, Obj)
                   end, [{Node0, "K0", crypto:rand_bytes(1024)},
                         {Node1, "K1", crypto:rand_bytes(1024)},
@@ -88,8 +87,7 @@ stack_and_send_0_({Node0, Node1}) ->
                         {Node0, "K8", crypto:rand_bytes(1024)},
                         {Node1, "K9", crypto:rand_bytes(1024)}
                        ]),
-    ok = leo_ordning_reda_stack:stop(Node0),
-    ok = leo_ordning_reda_stack:stop(Node1),
+    timer:sleep(4000),
     ok.
 
 stack_and_send_1_({Node0, Node1}) ->
@@ -122,7 +120,69 @@ stack_and_send_2_({Node0, Node1}) ->
 
 
 proper_test_() ->
-    ?debugVal(ok),
     {timeout, 60000, ?_assertEqual([], proper:module(leo_ordning_reda_api_prop))}.
+
+
+suite_test_() ->
+    {setup,
+     fun () ->
+             ok
+     end,
+     fun (_) ->
+             ok
+     end,
+     [
+      {"check deletion of containers",
+       {timeout, 180, fun remove_procs/0}}
+     ]}.
+
+remove_procs() ->
+    %% === Launch procs ===
+    %% prepare network
+    [] = os:cmd("epmd -daemon"),
+    {ok, Hostname} = inet:gethostname(),
+
+    Me = list_to_atom("me@" ++ Hostname),
+    net_kernel:start([Me, shortnames]),
+    {ok, Node0} = slave:start_link(list_to_atom(Hostname), 'node_0'),
+    {ok, Node1} = slave:start_link(list_to_atom(Hostname), 'node_1'),
+
+    %% launch application
+    ok = leo_ordning_reda_api:start(),
+
+    %% === Check ===
+    ?debugVal({'check', Node0}),
+    ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    {ok, _Size_1} = loop(1000, Node0, 0),
+    timer:sleep(2000),
+
+    ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    {ok, _Size_2} = loop(3, Node0, 0),
+    timer:sleep(2000),
+
+    ?debugVal({'check', Node1}),
+    ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
+    {ok, _Size_3} = loop(1000, Node1, 0),
+    timer:sleep(2000),
+
+    %% === Terminate procs ===
+    %% stop network
+    net_kernel:stop(),
+    slave:stop(Node0),
+    slave:stop(Node1),
+
+    %% stop application
+    ok = leo_ordning_reda_sup:stop(),
+    ok = application:stop(leo_ordning_reda),
+    ok.
+
+loop(0, _, Sum) ->
+    {ok, Sum};
+loop(Index, Node, Sum) ->
+    Key = lists:append(["key_", integer_to_list(Index)]),
+    Obj = crypto:rand_bytes(erlang:phash2(Index, 1024)),
+    Size = erlang:byte_size(Obj),
+    ok  = leo_ordning_reda_api:stack(Node, Key, Obj),
+    loop(Index - 1, Node, Sum + Size).
 
 -endif.

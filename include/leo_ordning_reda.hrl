@@ -26,7 +26,12 @@
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
 -define(ETS_TAB_DIVIDE_PID,  leo_ordning_reda_divide_pid).
 
--define(DEF_REMOVED_TIME,   3). %% 3-times
+-ifdef(TEST).
+-define(DEF_REMOVED_TIME, 2).
+-else.
+-define(DEF_REMOVED_TIME, 3).
+-endif.
+
 -define(DEF_BUF_SIZE, 1000000). %% about 1MB
 -define(REQ_TIMEOUT,    10000). %% 10sec
 -define(RCV_TIMEOUT,     1000). %% 1sec

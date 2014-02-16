@@ -20,7 +20,6 @@
 %%
 %%======================================================================
 -module(leo_ordning_reda_api).
-
 -author('Yosuke Hara').
 
 -include("leo_ordning_reda.hrl").
@@ -32,6 +31,17 @@
          stack/3, stack/4]).
 
 -define(PREFIX, "leo_ordning_reda_").
+
+-ifdef(TEST).
+-define(out_put_info_log(_Fun, _Unit),
+        error_logger:info_msg("~p,~p,~p,~p~n",
+                              [{module, ?MODULE_STRING},
+                               {function, _Fun},
+                               {line, ?LINE}, {body, _Unit}])).
+-else.
+-define(out_put_info_log(_Fun,_Unit), ok).
+-endif.
+
 
 %%--------------------------------------------------------------------
 %% API
@@ -64,9 +74,6 @@ add_container(stack = Type, Unit, Options) ->
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, _Pid} ->
-            error_logger:info_msg("~p,~p,~p,~p~n",
-                                  [{module, ?MODULE_STRING}, {function, "add_container/3"},
-                                   {line, ?LINE}, {body, {Unit, Options}}]),
             ok;
         {error, Cause} ->
             {error, Cause}
@@ -81,10 +88,7 @@ remove_container(stack = Type, Unit) ->
     Id = gen_id(Type, Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
     catch supervisor:delete_child(leo_ordning_reda_sup, Id),
-
-    error_logger:info_msg("~p,~p,~p,~p~n",
-                          [{module, ?MODULE_STRING}, {function, "remove_container/2"},
-                           {line, ?LINE}, {body, Unit}]),
+    ?out_put_info_log("remove_container/2", Unit),
     ok.
 
 
@@ -158,4 +162,3 @@ gen_id(Type, Unit0) ->
     list_to_atom(
       lists:append(
         [?PREFIX, atom_to_list(Type), "_", Unit1])).
-
