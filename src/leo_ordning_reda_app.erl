@@ -20,6 +20,7 @@
 %%
 %%======================================================================
 -module(leo_ordning_reda_app).
+-author('Yosuke Hara').
 
 -behaviour(application).
 

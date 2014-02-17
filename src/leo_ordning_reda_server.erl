@@ -20,7 +20,6 @@
 %%
 %%======================================================================
 -module(leo_ordning_reda_server).
-
 -author('Yosuke Hara').
 
 -behaviour(gen_server).
@@ -38,21 +37,17 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
--export([loop/2]).
-
--type(instance_name() :: atom()).
--type(pid_table()     :: ?ETS_TAB_STACK_PID | ?ETS_TAB_DIVIDE_PID).
 
 -define(DEF_TIMEOUT, 30000).
 
 -record(state, {id     :: atom(),
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size = 0     :: integer(), %% size of buffer
-                cur_size = 0     :: integer(), %% size of current stacked objects
+                buf_size = 0     :: pos_integer(), %% size of buffer
+                cur_size = 0     :: pos_integer(), %% size of current stacked objects
                 stack_obj = <<>> :: binary(),  %% stacked objects
                 stack_info = []  :: list(),    %% list of stacked object-info
-                timeout = 0      :: integer(), %% stacking timeout
+                timeout = 0      :: pos_integer(), %% stacking timeout
                 times   = 0      :: integer()  %% NOT execution times
                }).
 
@@ -91,7 +86,7 @@ stack(Id, AddrId, Key, Obj) ->
 -spec(exec(atom()) ->
              ok | {error, any()}).
 exec(Id) ->
-    gen_server:call(Id, {exec}, ?DEF_TIMEOUT).
+    gen_server:call(Id, exec, ?DEF_TIMEOUT).
 
 
 %%====================================================================
@@ -106,23 +101,22 @@ init([Id, stack, #stack_info{unit     = Unit,
                              module   = Module,
                              buf_size = BufSize,
                              timeout  = Timeout}]) ->
-    _Pid = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
     {ok, #state{id       = Id,
                 unit     = Unit,
                 module   = Module,
                 buf_size = BufSize,
-                timeout  = Timeout}}.
+                timeout  = Timeout}, Timeout}.
 
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
-handle_call({stack, Straw}, From, #state{id       = Id,
-                                         unit     = Unit,
+handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
-                                         buf_size = BufSize} = State) ->
-    case stack_fun0(Id, Straw, State) of
+                                         buf_size = BufSize,
+                                         timeout  = Timeout} = State) ->
+    case stack_fun(Straw, State) of
         {ok, #state{cur_size   = CurSize,
                     stack_obj  = StackObj,
                     stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
@@ -133,38 +127,34 @@ handle_call({stack, Straw}, From, #state{id       = Id,
             garbage_collect(self()),
             {noreply, NewState#state{cur_size   = 0,
                                      stack_obj  = <<>>,
-                                     stack_info = []}};
+                                     stack_info = [],
+                                     times = 0}, Timeout};
         {ok, NewState} ->
-            {reply, ok, NewState};
+            {reply, ok, NewState#state{times = 0}, Timeout};
         {error, _} = Error ->
-            {reply, Error, State}
+            {reply, Error, State#state{times = 0}, Timeout}
     end;
 
+handle_call(exec,_From, #state{cur_size = 0,
+                               timeout  = Timeout} = State) ->
+    garbage_collect(self()),
+    {reply, ok, State#state{cur_size   = 0,
+                            stack_obj  = <<>>,
+                            stack_info = [],
+                            times = 0}, Timeout};
 
-handle_call({exec}, From, #state{id       = Id,
-                                 unit     = Unit,
-                                 module   = Module,
-                                 cur_size = CurSize,
-                                 timeout  = Timeout,
-                                 times    = Times} = State) ->
-    case CurSize of
-        0 when Times >= (?DEF_REMOVED_TIME + 1) ->
-            timer:apply_after(
-              0, leo_ordning_reda_api, remove_container, [stack, Unit]),
-            {reply, ok, State};
-        0 ->
-            _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
-            {reply, ok, State#state{times = Times+1}};
-        _ ->
-            spawn(fun() ->
-                          exec_fun(From, Module, Unit, State#state.stack_obj, State#state.stack_info)
-                  end),
-            garbage_collect(self()),
-            _ = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
-            {noreply, State#state{cur_size   = 0,
-                                  stack_obj  = <<>>,
-                                  stack_info = []}}
-    end.
+handle_call(exec, From, #state{unit     = Unit,
+                               module   = Module,
+                               timeout  = Timeout} = State) ->
+    spawn(fun() ->
+                  exec_fun(From, Module, Unit,
+                           State#state.stack_obj, State#state.stack_info)
+          end),
+    garbage_collect(self()),
+    {noreply, State#state{cur_size   = 0,
+                          stack_obj  = <<>>,
+                          stack_info = [],
+                          times = 0}, Timeout}.
 
 
 %% Function: handle_cast(Msg, State) -> {noreply, State}          |
@@ -179,6 +169,20 @@ handle_cast(_Msg, State) ->
 %%                                       {noreply, State, Timeout} |
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
+handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
+                            unit    = Unit,
+                            timeout = Timeout} = State) ->
+    timer:apply_after(100, leo_ordning_reda_api, remove_container, [stack, Unit]),
+    {noreply, State, Timeout};
+handle_info(timeout, #state{cur_size = CurSize,
+                            times    = Times,
+                            timeout  = Timeout} = State) when CurSize == 0 ->
+    {noreply, State#state{times = Times + 1}, Timeout};
+handle_info(timeout, #state{id = Id,
+                            cur_size = CurSize,
+                            timeout  = Timeout} = State) when CurSize > 0 ->
+    timer:apply_after(100, ?MODULE, exec, [Id]),
+    {noreply, State#state{times = 0}, Timeout};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -201,103 +205,26 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% @doc Stack an object
 %%
--spec(stack_fun0(instance_name(), #straw{}, #state{}) ->
+-spec(stack_fun(#straw{}, #state{}) ->
              {ok, #state{}} | {error, any()}).
-stack_fun0(Id, Straw, State) ->
-    case catch ets:lookup(?ETS_TAB_STACK_PID, Id) of
-        {'EXIT', Cause} ->
-            error_logger:error_msg("~p,~p,~p,~p~n",
-                                   [{module, ?MODULE_STRING}, {function, "stack_fun0/3"},
-                                    {line, ?LINE}, {body, Cause}]),
-            {error, Cause};
-        [] ->
-            #state{id = Id, timeout = Timeout} = State,
-            Pid = gen_instance(?ETS_TAB_STACK_PID, Id, Timeout),
+stack_fun(Straw, #state{cur_size   = CurSize,
+                        stack_obj  = StackObj_1,
+                        stack_info = StackInfo_1} = State) ->
+    List = [Key || {_, Key} <- StackInfo_1],
 
-            case ets:insert(?ETS_TAB_STACK_PID, {Id, Pid}) of
-                true ->
-                    stack_fun1(Id, Pid, Straw, State);
-                {'EXIT', Cause} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING}, {function, "stack_fun0/3"},
-                                            {line, ?LINE}, {body, Cause}]),
-                    {error, Cause}
-            end;
-        [{_, Pid}|_] ->
-            stack_fun1(Id, Pid, Straw, State)
-    end.
-
-%% @doc Append an object into the process.
-%%
--spec(stack_fun1(instance_name(), pid(), #straw{}, #state{}) ->
-             {ok, #state{}} | {error, any()}).
-stack_fun1(Id, Pid, Straw, #state{cur_size   = CurSize,
-                                  stack_obj  = StackObj0,
-                                  stack_info = StackInf0} = State) ->
-    case erlang:is_process_alive(Pid) of
-        false ->
-            catch ets:delete(?ETS_TAB_STACK_PID, Id),
-            stack_fun0(Id, Straw, State);
+    case lists:member(Straw#straw.key, List) of
         true ->
-            Pid ! {self(), request},
-            receive
-                ok ->
-                    List = [Key || {_, Key} <- StackInf0],
-
-                    case lists:member(Straw#straw.key, List) of
-                        true ->
-                            {ok, State};
-                        false ->
-                            Bin = Straw#straw.object,
-                            StackObj1 = << StackObj0/binary,  Bin/binary>>,
-                            StackInf1 = [{Straw#straw.addr_id,
-                                          Straw#straw.key}  | StackInf0],
-                            Size   = Straw#straw.size + CurSize,
-                            {ok, State#state{cur_size   = Size,
-                                             stack_obj  = StackObj1,
-                                             stack_info = StackInf1}}
-                    end
-            after
-                ?RCV_TIMEOUT ->
-                    catch ets:delete(?ETS_TAB_STACK_PID, Id),
-                    stack_fun0(Id, Straw, State)
-            end
+            {ok, State};
+        false ->
+            Bin = Straw#straw.object,
+            StackObj_2  = << StackObj_1/binary, Bin/binary>>,
+            StackInfo_2 = [{Straw#straw.addr_id,
+                            Straw#straw.key}  | StackInfo_1],
+            Size = Straw#straw.size + CurSize,
+            {ok, State#state{cur_size   = Size,
+                             stack_obj  = StackObj_2,
+                             stack_info = StackInfo_2}}
     end.
-
-
-%% @doc
-%%
--spec(loop(atom(), integer()) ->
-             ok).
-loop(Id, Timeout) ->
-    receive
-        {From, request} ->
-            From ! ok,
-            loop(Id, Timeout)
-    after
-        Timeout ->
-            timer:apply_after(0, ?MODULE, exec, [Id]),
-            purge_proc(self())
-    end.
-
-
-%% @doc Purge a process
-%%
--spec(purge_proc(pid()) ->
-             ok).
-purge_proc(Pid) ->
-    garbage_collect(Pid),
-    exit(Pid, purge).
-
-
-%% @doc Create a process
-%%
--spec(gen_instance(pid_table(), atom(), integer()) ->
-             pid()).
-gen_instance(?ETS_TAB_STACK_PID, Id, Timeout) ->
-    spawn(?MODULE, loop, [Id, Timeout]);
-gen_instance(?ETS_TAB_DIVIDE_PID,_,_) ->
-    ok.
 
 
 %% @doc Execute a function
@@ -333,4 +260,3 @@ exec_fun(From, Module, Unit, StackObj, StackInf) ->
             Cause1 = element(1, Cause0),
             gen_server:reply(From, {error, Cause1})
     end.
-

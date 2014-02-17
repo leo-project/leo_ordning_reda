@@ -24,21 +24,12 @@
 %% @end
 %%======================================================================
 -module(leo_ordning_reda_behaviour).
-
 -author('Yosuke Hara').
 
--export([behaviour_info/1]).
+-include("leo_ordning_reda.hrl").
 
-behaviour_info(callbacks) ->
-    [
-     %% handle_send(Node::atom(), Stack::list(#straw{})) ->
-     %%     ok | {error, list()}
-     {handle_send, 2},
+-callback(handle_send(Node::atom(), Stack::list(#straw{})) ->
+                 ok | {error, any()}).
 
-     %% handle_fail(Node::atom(), Errors::list(#straw{})) ->
-     %%     ok | {error, any()}
-     {handle_fail, 2}
-    ];
-behaviour_info(_Other) ->
-    undefined.
-
+-callback(handle_fail(Node::atom(), Errors::list(#straw{})) ->
+                 ok | {error, any()}).
