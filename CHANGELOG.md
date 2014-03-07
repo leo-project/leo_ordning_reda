@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+0.10.1 (Mar 7, 2014)
+=====================
+
+* Improved
+    * Remove unnecessary parameters
+
+
 0.10.0 (Feb 17, 2014)
 =====================
 
