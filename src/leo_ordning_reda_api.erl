@@ -27,7 +27,8 @@
 
 
 %% Application callbacks
--export([start/0, add_container/3, remove_container/2, has_container/2,
+-export([start/0,
+         add_container/2, remove_container/1, has_container/1,
          stack/3, stack/4]).
 
 -define(PREFIX, "leo_ordning_reda_").
@@ -56,10 +57,10 @@ start() ->
 
 %% @doc Add a container into the App
 %%
--spec(add_container(stack, atom(), list()) ->
+-spec(add_container(atom(), list()) ->
              ok | {error, any()}).
-add_container(stack = Type, Unit, Options) ->
-    Id = gen_id(Type, Unit),
+add_container(Unit, Options) ->
+    Id = gen_id(Unit),
     Module  = leo_misc:get_value('module',      Options),
     BufSize = leo_misc:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
     Timeout = leo_misc:get_value('timeout',     Options, ?REQ_TIMEOUT),
@@ -82,22 +83,22 @@ add_container(stack = Type, Unit, Options) ->
 
 %% @doc Remove a container from the App
 %%
--spec(remove_container(stack, atom()) ->
+-spec(remove_container(atom()) ->
              ok | {error, any()}).
-remove_container(stack = Type, Unit) ->
-    Id = gen_id(Type, Unit),
+remove_container(Unit) ->
+    Id = gen_id(Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
     catch supervisor:delete_child(leo_ordning_reda_sup, Id),
-    ?out_put_info_log("remove_container/2", Unit),
+    ?out_put_info_log("remove_container/1", Unit),
     ok.
 
 
 %% @doc Has a container into the App
 %%
--spec(has_container(stack, atom()) ->
+-spec(has_container(atom()) ->
              true | false).
-has_container(stack = Type, Unit) ->
-    whereis(gen_id(Type, Unit)) /= undefined.
+has_container(Unit) ->
+    whereis(gen_id(Unit)) /= undefined.
 
 
 %% @doc Stack an object into the proc
@@ -110,10 +111,9 @@ stack(Unit, Key, Object) ->
 -spec(stack(atom(), integer(), string(), binary()) ->
              ok | {error, any()}).
 stack(Unit, AddrId, Key, Object) ->
-    Type = stack,
-    Id = gen_id(Type, Unit),
-    case has_container(Type, Unit) of
+    case has_container(Unit) of
         true ->
+            Id = gen_id(Unit),
             leo_ordning_reda_server:stack(Id, AddrId, Key, Object);
         false ->
             {error, undefined}
@@ -152,13 +152,11 @@ start_app() ->
 
 %% @doc Generate Id
 %%
--spec(gen_id(stack, atom()) ->
+-spec(gen_id(atom()) ->
              string()).
-gen_id(Type, Unit0) ->
-    Unit1 = case is_atom(Unit0) of
-                true  -> atom_to_list(Unit0);
-                false -> Unit0
-            end,
-    list_to_atom(
-      lists:append(
-        [?PREFIX, atom_to_list(Type), "_", Unit1])).
+gen_id(Unit) ->
+    Unit_1 = case is_atom(Unit) of
+                 true  -> atom_to_list(Unit);
+                 false -> Unit
+             end,
+    list_to_atom(lists:append([?PREFIX, "_", Unit_1])).

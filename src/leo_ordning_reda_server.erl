@@ -172,7 +172,7 @@ handle_cast(_Msg, State) ->
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
-    timer:apply_after(100, leo_ordning_reda_api, remove_container, [stack, Unit]),
+    timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State, Timeout};
 handle_info(timeout, #state{cur_size = CurSize,
                             times    = Times,
