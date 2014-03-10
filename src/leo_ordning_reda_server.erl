@@ -238,7 +238,8 @@ exec_fun(From, Module, Unit, StackObj, StackInf) ->
         {ok, CompressedObjs} ->
             %% Send compressed objects
             %%
-            case catch erlang:apply(Module, handle_send, [Unit, CompressedObjs]) of
+            case catch erlang:apply(Module, handle_send,
+                                    [Unit, StackInf, CompressedObjs]) of
                 ok ->
                     gen_server:reply(From, ok);
                 {_, Cause} ->
