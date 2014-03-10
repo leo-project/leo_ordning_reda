@@ -32,10 +32,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([start_link/3, stop/1]).
--export([handle_send/2,
+-export([handle_send/3,
          handle_fail/2]).
-%% -export([handle_send/3,
-%%          handle_fail/2]).
 
 %%--------------------------------------------------------------------
 %% API
@@ -62,12 +60,9 @@ stop(Node) ->
 %%--------------------------------------------------------------------
 %% @doc
 %%
-handle_send(_Node, _StackedObjects) ->
-    ?debugVal({_Node, byte_size(_StackedObjects)}),
+handle_send(_Node, _StackedInfo, _StackedObjects) ->
+    ?debugVal({_Node, length(_StackedInfo), byte_size(_StackedObjects)}),
     ok.
-%% handle_send(_Node, _StackedInfo, _StackedObjects) ->
-%%     ?debugVal({_Node, length(_StackedInfo), byte_size(_StackedObjects)}),
-%%     ok.
 
 
 %% @doc

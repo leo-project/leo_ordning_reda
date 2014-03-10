@@ -28,10 +28,8 @@
 
 -include("leo_ordning_reda.hrl").
 
--callback(handle_send(Node::atom(), CompressedObjs::binary()) ->
+-callback(handle_send(Node::atom(), StackInfo::list(#straw{}), CompressedObjs::binary()) ->
                  ok | {error, any()}).
-%% -callback(handle_send(Node::atom(), StackInfo::list(#straw{}), CompressedObjs::binary()) ->
-%%                  ok | {error, any()}).
 
 -callback(handle_fail(Node::atom(), Errors::list(#straw{})) ->
                  ok | {error, any()}).
