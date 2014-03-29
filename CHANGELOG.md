@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+0.10.2 (Mar 29, 2014)
+=====================
+
+* Improved
+    * Revise the interface of handle-send
+    * Bump leo_commons
+
 0.10.1 (Mar 7, 2014)
 =====================
 
