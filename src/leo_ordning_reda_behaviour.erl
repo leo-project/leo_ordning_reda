@@ -28,7 +28,7 @@
 
 -include("leo_ordning_reda.hrl").
 
--callback(handle_send(Node::atom(), Stack::list(#straw{})) ->
+-callback(handle_send(Node::atom(), StackInfo::list(#straw{}), CompressedObjs::binary()) ->
                  ok | {error, any()}).
 
 -callback(handle_fail(Node::atom(), Errors::list(#straw{})) ->

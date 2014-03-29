@@ -233,30 +233,35 @@ stack_fun(Straw, #state{cur_size   = CurSize,
              ok | {error, list()}).
 exec_fun(From, Module, Unit, StackObj, StackInf) ->
     %% Compress object-list
-    %%
-    case catch lz4:pack(StackObj) of
-        {ok, CompressedObjs} ->
-            %% Send compressed objects
-            %%
-            case catch erlang:apply(Module, handle_send, [Unit, CompressedObjs]) of
-                ok ->
-                    gen_server:reply(From, ok);
-                {_, Cause} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
-                                            {line, ?LINE}, {body, Cause}]),
-                    case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
+    Reply = case catch lz4:pack(StackObj) of
+                {ok, CompressedObjs} ->
+                    %% Send compressed objects
+                    case catch erlang:apply(
+                                 Module, handle_send,
+                                 [Unit, StackInf, CompressedObjs]) of
                         ok ->
-                            void;
-                        {_, Cause0} ->
-                            Cause1 = element(1, Cause0),
+                            ok;
+                        {_, Cause} ->
                             error_logger:error_msg("~p,~p,~p,~p~n",
-                                                   [{module, ?MODULE_STRING}, {function, "exec_fun/3"},
-                                                    {line, ?LINE}, {body, Cause1}])
-                    end,
-                    gen_server:reply(From, {error, StackInf})
-            end;
-        {_, Cause0} ->
-            Cause1 = element(1, Cause0),
-            gen_server:reply(From, {error, Cause1})
-    end.
+                                                   [{module, ?MODULE_STRING},
+                                                    {function, "exec_fun/5"},
+                                                    {line, ?LINE}, {body, Cause}]),
+                            case catch erlang:apply(
+                                         Module, handle_fail, [Unit, StackInf]) of
+                                ok ->
+                                    void;
+                                {_, Cause0} ->
+                                    Cause1 = element(1, Cause0),
+                                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                                           [{module, ?MODULE_STRING},
+                                                            {function, "exec_fun/5"},
+                                                            {line, ?LINE}, {body, Cause1}])
+                            end,
+                            {error, StackInf}
+                    end;
+                {_, Cause0} ->
+                    Cause1 = element(1, Cause0),
+                    {error, Cause1}
+            end,
+    garbage_collect(self()),
+    gen_server:reply(From, Reply).
