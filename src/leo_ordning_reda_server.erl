@@ -26,11 +26,11 @@
 
 -include("leo_ordning_reda.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
+-include_lib("kernel/include/file.hrl").
 
 %% Application callbacks
--export([start_link/3, stop/1]).
--export([stack/4, exec/1]).
+-export([start_link/2, stop/1]).
+-export([stack/4, exec/1, close/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -45,10 +45,13 @@
                 module :: atom(), %% callback-mod
                 buf_size = 0     :: pos_integer(), %% size of buffer
                 cur_size = 0     :: pos_integer(), %% size of current stacked objects
-                stack_obj = <<>> :: binary(),  %% stacked objects
-                stack_info = []  :: list(),    %% list of stacked object-info
+                stack_obj = <<>> :: binary(),      %% stacked objects
+                stack_info = []  :: list(),        %% list of stacked object-info
                 timeout = 0      :: pos_integer(), %% stacking timeout
-                times   = 0      :: integer()  %% NOT execution times
+                times   = 0      :: integer(),     %% NOT execution times
+                tmp_stacked_obj  :: string(),      %% Temporary stacked file path - obj
+                tmp_stacked_inf  :: string(),      %% Temporary stacked file path - info
+                tmp_file_handler :: pid()          %% Temporary file handler
                }).
 
 
@@ -57,11 +60,11 @@
 %% ===================================================================
 %% Function: start_link() -> {ok,Pid} | ignore | {error,Error}
 %% Description: Starts the server
--spec(start_link(atom(), stack, #stack_info{}) ->
+-spec(start_link(atom(), #stack_info{}) ->
              ok | {error, any()}).
-start_link(Id, stack, StackInfo) ->
+start_link(Id, StackInfo) ->
     gen_server:start_link({local, Id}, ?MODULE,
-                          [Id, stack, StackInfo], []).
+                          [Id, StackInfo], []).
 
 %% @doc Stop this server
 %%
@@ -89,6 +92,14 @@ exec(Id) ->
     gen_server:call(Id, exec, ?DEF_TIMEOUT).
 
 
+%% @doc Close a stacked file
+%%
+-spec(close(atom()) ->
+             ok | {error, any()}).
+close(Id) ->
+    gen_server:call(Id, close, ?DEF_TIMEOUT).
+
+
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
@@ -97,15 +108,47 @@ exec(Id) ->
 %%                         ignore               |
 %%                         {stop, Reason}
 %% Description: Initiates the server
-init([Id, stack, #stack_info{unit     = Unit,
-                             module   = Module,
-                             buf_size = BufSize,
-                             timeout  = Timeout}]) ->
-    {ok, #state{id       = Id,
-                unit     = Unit,
-                module   = Module,
-                buf_size = BufSize,
-                timeout  = Timeout}, Timeout}.
+init([Id, #stack_info{unit     = Unit,
+                      module   = Module,
+                      buf_size = BufSize,
+                      timeout  = Timeout,
+                      tmp_stacked_dir = TmpStackedDir
+                     }]) ->
+    _ = filelib:ensure_dir(TmpStackedDir),
+    StackedObj = filename:join([TmpStackedDir,
+                                lists:append([atom_to_list(Id), ".obj"])]),
+    StackedInf = filename:join([TmpStackedDir,
+                                lists:append([atom_to_list(Id), ".inf"])]),
+    {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
+    {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
+
+    State = #state{id       = Id,
+                   unit     = Unit,
+                   module   = Module,
+                   buf_size = BufSize,
+                   timeout  = Timeout,
+                   tmp_stacked_obj = StackedObj,
+                   tmp_stacked_inf = StackedInf,
+                   tmp_file_handler = HandlerObj
+                  },
+    State_1 = case file:read_file_info(StackedObj) of
+                  {ok, #file_info{size = Size}} when Size > 0 ->
+                      case file:read_file(StackedObj) of
+                          {ok, Bin} ->
+                              case catch file:consult(StackedInf) of
+                                  {ok, Term} ->
+                                      State#state{stack_obj  = Bin,
+                                                  stack_info = Term};
+                                  _ ->
+                                      State
+                              end;
+                          _ ->
+                              State
+                      end;
+                  _ ->
+                      State
+              end,
+    {ok, State_1, Timeout}.
 
 
 handle_call(stop, _From, State) ->
@@ -154,7 +197,17 @@ handle_call(exec, From, #state{unit     = Unit,
     {noreply, State#state{cur_size   = 0,
                           stack_obj  = <<>>,
                           stack_info = [],
-                          times = 0}, Timeout}.
+                          times = 0}, Timeout};
+
+handle_call(close,_From, #state{stack_info = StackInfo,
+                                stack_obj  = StackObj,
+                                tmp_stacked_inf  = StackedInf,
+                                tmp_file_handler = Handler,
+                                timeout = Timeout} = State) ->
+    catch leo_file:file_unconsult(StackedInf, StackInfo),
+    catch file:write(Handler, StackObj),
+    garbage_collect(self()),
+    {reply, ok, State, Timeout}.
 
 
 %% Function: handle_cast(Msg, State) -> {noreply, State}          |

@@ -47,7 +47,8 @@ start_link() ->
 stop() ->
     case whereis(?MODULE) of
         Pid when is_pid(Pid) == true ->
-            exit(Pid, shutdown),
+            List = supervisor:which_children(Pid),
+            ok = close(List),
             ok;
         _ -> not_started
     end.
@@ -62,3 +63,17 @@ stop() ->
 %% @private
 init([]) ->
     {ok, {{one_for_one, 5, 60}, []}}.
+
+
+%% ---------------------------------------------------------------------
+%% Inner Function(s)
+%% ---------------------------------------------------------------------
+%% @doc Close a internal databases
+%% @private
+close([]) ->
+    ok;
+close([{Id,_Pid, worker, ['leo_ordning_reda_server' = Mod|_]}|T]) ->
+    ok = Mod:close(Id),
+    close(T);
+close([_|T]) ->
+    close(T).

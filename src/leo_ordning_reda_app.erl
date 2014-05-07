@@ -25,7 +25,7 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %% ===================================================================
 %% Application callbacks
@@ -33,6 +33,10 @@
 
 start(_StartType, _StartArgs) ->
     leo_ordning_reda_sup:start_link().
+
+prep_stop(_State) ->
+    ok = leo_ordning_reda_sup:stop(),
+    ok.
 
 stop(_State) ->
     ok.
