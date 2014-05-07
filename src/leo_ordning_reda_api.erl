@@ -27,11 +27,11 @@
 
 
 %% Application callbacks
--export([start/0,
+-export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
          stack/3, stack/4]).
 
--define(PREFIX, "leo_ordning_reda_").
+-define(PREFIX, "leo_ord_reda_").
 
 -ifdef(TEST).
 -define(out_put_info_log(_Fun, _Unit),
@@ -47,12 +47,20 @@
 %%--------------------------------------------------------------------
 %% API
 %%--------------------------------------------------------------------
-%% @doc Launch
+%% @doc Launch the application
 %%
 -spec(start() ->
              ok | {error, any()}).
 start() ->
     start_app().
+
+
+%% @doc Stop the application
+%%
+-spec(stop() ->
+             ok | {error, any()}).
+stop() ->
+    leo_ordning_reda_sup:stop().
 
 
 %% @doc Add a container into the App
@@ -64,11 +72,14 @@ add_container(Unit, Options) ->
     Module  = leo_misc:get_value('module',      Options),
     BufSize = leo_misc:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
     Timeout = leo_misc:get_value('timeout',     Options, ?REQ_TIMEOUT),
+    TmpStackedDir = ?env_temp_stacked_dir(),
 
-    Args = [Id, stack, #stack_info{unit     = Unit,
-                                   module   = Module,
-                                   buf_size = BufSize,
-                                   timeout  = Timeout}],
+    Args = [Id, #stack_info{unit     = Unit,
+                            module   = Module,
+                            buf_size = BufSize,
+                            timeout  = Timeout,
+                            tmp_stacked_dir = TmpStackedDir
+                           }],
     ChildSpec = {Id,
                  {leo_ordning_reda_server, start_link, Args},
                  temporary, 2000, worker, [leo_ordning_reda_server]},
@@ -144,7 +155,8 @@ start_app() ->
             ok;
         {error, Cause} ->
             error_logger:error_msg("~p,~p,~p,~p~n",
-                                   [{module, ?MODULE_STRING}, {function, "start_app/0"},
+                                   [{module, ?MODULE_STRING},
+                                    {function, "start_app/0"},
                                     {line, ?LINE}, {body, Cause}]),
             {exit, Cause}
     end.
@@ -159,4 +171,4 @@ gen_id(Unit) ->
                  true  -> atom_to_list(Unit);
                  false -> Unit
              end,
-    list_to_atom(lists:append([?PREFIX, "_", Unit_1])).
+    list_to_atom(lists:append([?PREFIX, Unit_1])).

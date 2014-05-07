@@ -1,12 +1,21 @@
 CHANGELOG
 =========
 
+0.10.3 (May 7, 2014)
+=====================
+
+* Improved
+    * Modified termination of the application
+        * Able to store stacked objects into a local disk. Also, after restart a process, it loads temporally stored data and objects.
+
+
 0.10.2 (Mar 29, 2014)
 =====================
 
 * Improved
     * Revise the interface of handle-send
     * Bump leo_commons
+
 
 0.10.1 (Mar 7, 2014)
 =====================

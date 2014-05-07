@@ -35,12 +35,14 @@
 -define(DEF_BUF_SIZE, 1000000). %% about 1MB
 -define(REQ_TIMEOUT,    10000). %% 10sec
 -define(RCV_TIMEOUT,     1000). %% 1sec
+-define(DEF_TMP_STACKED_DIR, "work/ord_reda/").
 
 -record(stack_info, {
-          unit         :: atom(),    %% id of unit of stack
-          module       :: atom(),    %% callback module
-          buf_size = 0 :: integer(), %% buffer size
-          timeout  = 0 :: integer()  %% buffering timeout
+          unit         :: atom(),     %% id of unit of stack
+          module       :: atom(),     %% callback module
+          buf_size = 0 :: integer(),  %% buffer size
+          timeout  = 0 :: integer(),  %% buffering timeout
+          tmp_stacked_dir :: string() %% temporary stacked dir
          }).
 
 -record(straw, {addr_id :: integer(), %% ring address id
@@ -51,6 +53,12 @@
 
 -define(env_send_after_interval(),
         case application:get_env(leo_ordning_reda, send_after_interval) of
-            {ok, SendAfterInterval} -> SendAfterInterval;
+            {ok, _SendAfterInterval} -> _SendAfterInterval;
             _ -> 100 %% 100msec
+        end).
+
+-define(env_temp_stacked_dir(),
+        case application:get_env(leo_ordning_reda, temp_stacked_dir) of
+            {ok, _TmpStackedDir} -> _TmpStackedDir;
+            _ -> ?DEF_TMP_STACKED_DIR
         end).

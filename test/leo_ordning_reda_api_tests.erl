@@ -44,8 +44,9 @@ ordning_reda_test_() ->
                           ]]}.
 
 setup() ->
-    %% prepare network
-    [] = os:cmd("epmd -daemon"),
+    %% prepare
+    os:cmd("rm work/ord_reda/*"),
+    os:cmd("epmd -daemon"),
     {ok, Hostname} = inet:gethostname(),
 
     Me = list_to_atom("me@" ++ Hostname),
@@ -151,7 +152,6 @@ remove_procs() ->
     ok = leo_ordning_reda_api:start(),
 
     %% === Check ===
-    ?debugVal({'check', Node0}),
     ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
     {ok, _Size_1} = loop(1000, Node0, 0),
     timer:sleep(2000),
@@ -160,7 +160,6 @@ remove_procs() ->
     {ok, _Size_2} = loop(3, Node0, 0),
     timer:sleep(2000),
 
-    ?debugVal({'check', Node1}),
     ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
     {ok, _Size_3} = loop(1000, Node1, 0),
     timer:sleep(2000),
