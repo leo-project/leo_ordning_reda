@@ -28,6 +28,8 @@ build_plt:
 dialyzer:
 	@$(REBAR) compile
 	dialyzer --plt $(PLT_FILE) -r ebin/ --dump_callgraph $(DOT_FILE)
+typer:
+	typer --plt $(PLT_FILE) -I include/ -r src/
 doc: compile
 	@$(REBAR) doc
 callgraph: graphviz
