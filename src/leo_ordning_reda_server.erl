@@ -43,11 +43,11 @@
 -record(state, {id     :: atom(),
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size = 0     :: pos_integer(), %% size of buffer
-                cur_size = 0     :: pos_integer(), %% size of current stacked objects
+                buf_size = 0     :: non_neg_integer(), %% size of buffer
+                cur_size = 0     :: non_neg_integer(), %% size of current stacked objects
                 stack_obj = <<>> :: binary(),      %% stacked objects
                 stack_info = []  :: list(),        %% list of stacked object-info
-                timeout = 0      :: pos_integer(), %% stacking timeout
+                timeout = 0      :: non_neg_integer(), %% stacking timeout
                 times   = 0      :: integer(),     %% NOT execution times
                 tmp_stacked_obj  :: string(),      %% Temporary stacked file path - obj
                 tmp_stacked_inf  :: string(),      %% Temporary stacked file path - info
@@ -75,7 +75,7 @@ stop(Id) ->
 
 %% @doc Stacking objects
 %%
--spec(stack(atom(), integer(), string(), tuple({any(), binary()})) ->
+-spec(stack(atom(), integer() | 'undefined', string() | 'undefined', binary()) ->
              ok | {error, any()}).
 stack(Id, AddrId, Key, Obj) ->
     gen_server:call(Id, {stack, #straw{addr_id = AddrId,
@@ -173,9 +173,7 @@ handle_call({stack, Straw}, From, #state{unit     = Unit,
                                      stack_info = [],
                                      times = 0}, Timeout};
         {ok, NewState} ->
-            {reply, ok, NewState#state{times = 0}, Timeout};
-        {error, _} = Error ->
-            {reply, Error, State#state{times = 0}, Timeout}
+            {reply, ok, NewState#state{times = 0}, Timeout}
     end;
 
 handle_call(exec,_From, #state{cur_size = 0,
@@ -258,8 +256,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% @doc Stack an object
 %%
--spec(stack_fun(#straw{}, #state{}) ->
-             {ok, #state{}} | {error, any()}).
+-spec stack_fun(#straw{}, #state{}) -> {ok, #state{}}.
 stack_fun(Straw, #state{cur_size   = CurSize,
                         stack_obj  = StackObj_1,
                         stack_info = StackInfo_1} = State) ->
@@ -282,7 +279,7 @@ stack_fun(Straw, #state{cur_size   = CurSize,
 
 %% @doc Execute a function
 %%
--spec(exec_fun(pid(), atom(), atom(), list(), list()) ->
+-spec(exec_fun({_, pid()}, atom(), atom(), binary(), list()) ->
              ok | {error, list()}).
 exec_fun(From, Module, Unit, StackObj, StackInf) ->
     %% Compress object-list

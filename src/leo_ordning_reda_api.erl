@@ -164,8 +164,7 @@ start_app() ->
 
 %% @doc Generate Id
 %%
--spec(gen_id(atom()) ->
-             string()).
+-spec(gen_id(atom()|string()) -> atom()).
 gen_id(Unit) ->
     Unit_1 = case is_atom(Unit) of
                  true  -> atom_to_list(Unit);
