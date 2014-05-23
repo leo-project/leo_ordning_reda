@@ -3,66 +3,36 @@ leo_ordning_reda
 
 [![Build Status](https://secure.travis-ci.org/leo-project/leo_ordning_reda.png?branch=master)](http://travis-ci.org/leo-project/leo_ordning_reda)
 
+**leo_ordning_reda** is a library to handle large objects efficiently.
+We can easily write programs that automatically stack and compress large objects to pass them other processes.
 
-Overview
---------
-* "leo_ordning_reda" is bulked files and compression/decompression library for [LeoFS](http://leo-project.net/leofs) and other Erlang applications.
+## Build Information
+
 * "leo_ordning_reda" uses the [rebar](https://github.com/rebar/rebar) build system. Makefile so that simply running "make" at the top level should work.
 * "leo_ordning_reda" requires Erlang R15B03-1 or later.
 
 
+## Usage in Leo Project
+
+**leo_ordning_reda** is used in [**leo_storage**](https://github.com/leo-project/leo_storage).
+It is used to replicate stored objects between remote data centers efficiently.
+
 ## Usage
+
+We prepare a server program and a cliente program to use **leo_ordning_reda**.
+
+First, a server program is as follow.
+Note that, `handle_send` is called when objects are stacked more than `BufSize` or more than `Timeout` miliseconds imepassed.
 
 ```erlang
 
--module(leo_ordning_reda_stack).
--behaviour(leo_ordning_reda_behaviour).
 
--include("leo_ordning_reda.hrl").
--include_lib("eunit/include/eunit.hrl").
+```
 
--export([start_link/3, stop/1]).
--export([sample/0]).
--export([handle_send/2,
-         handle_fail/2]).
+Second, a client program is as follow.
 
-%%--------------------------------------------------------------------
-%% API
-%%--------------------------------------------------------------------
-start_link(Node, BufSize, Timeout) ->
-    leo_ordning_reda_api:add_container(stack, Node, [{module,      ?MODULE},
-                                                     {buffer_size, BufSize},
-                                                     {timeout,     Timeout}]).
-stop(Node) ->
-    leo_ordning_reda_api:remove_container(stack, Node).
+```erlang
 
-sample() ->
-    Buffer = 64*1024*1024,
-    Expire = timer:seconds(30),
-
-    ok = leo_ordning_reda_api:start(),
-    ok = leo_ordning_reda_stack:start_link(Node0, Buffer, Expire),
-
-    DestNode = 'node_0@127.0.0.1',
-    Key = "test_key_1",
-    Obj = crypto:rand_bytes(erlang:phash2(Index, 1024)),
-    ok  = leo_ordning_reda_api:stack(Node, Key, Obj),
-
-    ok = application:stop(leo_ordning_reda),
-    ok.
-
-%%--------------------------------------------------------------------
-%% Callback
-%%--------------------------------------------------------------------
-handle_send(_Node, _StackedObjects) ->
-    %% Able to implement a sending stacked objects to a destination node
-    ?debugVal({_Node, byte_size(_StackedObjects)}),
-    ok.
-
-handle_fail(_Node, _Errors) ->
-    %% Able to implement a fail processing
-    ?debugVal({_Node, length(_Errors)}),
-    ok.
 
 ```
 
