@@ -29,7 +29,8 @@
 %% Application callbacks
 -export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
-         stack/3, stack/4]).
+         stack/3, stack/4,
+         pack/1, unpack/1]).
 
 -define(PREFIX, "leo_ord_reda_").
 
@@ -130,6 +131,40 @@ stack(Unit, AddrId, Key, Object) ->
             {error, undefined}
     end.
 
+%% @doc Pack an object
+%%
+-spec pack(any()) -> {ok, binary()} | {error, _}.
+pack(Object) ->
+    ObjBin = term_to_binary(Object),
+    SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
+    case byte_size(SizeBin) of
+        1 ->
+            {ok, <<0/integer, SizeBin/binary, ObjBin/binary>>};
+        2 ->
+            {ok, <<SizeBin/binary, ObjBin/binary>>};
+        _ ->
+            {error, "too big object!"}
+    end.
+
+%% @doc Unpack an object
+%%
+-spec unpack(binary) -> [any()].
+unpack(CompressedBin) ->
+    {ok, Bin} = lz4:unpack(CompressedBin),
+    unpack2(Bin).
+
+-spec unpack2(binary) -> [any()].
+unpack2(<<>>) -> [];
+unpack2(Bin) ->
+    H1 = binary:part(Bin, {0, 2}),
+    Size1 = case binary_to_list(H1) of
+                [X, Y] ->
+                    X * 256 + Y
+            end,
+    Dat1 = binary_to_term(binary:part(Bin, {2, Size1})),
+    Rest = binary:part(Bin, {2 + Size1, byte_size(Bin) - 2 - Size1}),
+    Ret = unpack2(Rest),
+    [Dat1|Ret].
 
 %%--------------------------------------------------------------------
 %% INNTERNAL FUNCTIONS
