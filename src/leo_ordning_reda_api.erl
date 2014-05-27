@@ -157,10 +157,7 @@ unpack(CompressedBin) ->
 unpack2(<<>>) -> [];
 unpack2(Bin) ->
     H1 = binary:part(Bin, {0, 2}),
-    Size1 = case binary_to_list(H1) of
-                [X, Y] ->
-                    X * 256 + Y
-            end,
+    Size1 = binary:decode_unsigned(H1),
     Dat1 = binary_to_term(binary:part(Bin, {2, Size1})),
     Rest = binary:part(Bin, {2 + Size1, byte_size(Bin) - 2 - Size1}),
     Ret = unpack2(Rest),

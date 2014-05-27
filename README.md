@@ -19,10 +19,10 @@ It is used to replicate stored objects between remote data centers efficiently.
 
 ## Usage
 
-We prepare a server program and a cliente program to use **leo_ordning_reda**.
+We prepare a server program and a client program to use **leo_ordning_reda**.
 
 First, a server program is as follow.
-Note that, `handle_send` is called when objects are stacked more than `BufSize` or more than `Timeout` miliseconds imepassed.
+Note that, `handle_send` is called when objects are stacked more than `BufSize` or more than `Timeout` milliseconds passed.
 
 ```erlang
 -module(leo_ordning_reda_test_server).
