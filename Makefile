@@ -41,6 +41,3 @@ clean:
 distclean:
 	@$(REBAR) delete-deps
 	@$(REBAR) clean
-qc:
-	@$(REBAR) qc skip_deps=true
-
