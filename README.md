@@ -50,7 +50,7 @@ main() ->
     ok).
 output(CompressedBin) ->
     Fun = fun(Obj) -> io:format("~p~n",[Obj]) end,
-    ok = leo_ordning_reda_api:unpack(CompressedBin).
+    ok = leo_ordning_reda_api:unpack(CompressedBin, Fun).
 ```
 
 Second, a server program is as follow.
