@@ -32,7 +32,7 @@ First, a client program is as follow.
 -define(BUFSIZE, 100). %% 100B
 -define(TIMEOUT, 100). %% 0.1sec
 
--export([main/0, print/1]).
+-export([main/0, output/1]).
 
 main() ->
     Node = node(),
@@ -46,10 +46,11 @@ main() ->
     ok = application:stop(leo_ordning_reda),
     ok.
 
-print(CompressedBin) ->
-    Objects = leo_ordning_reda_api:unpack(CompressedBin),
-    ?debugVal(Objects),
-    ok.
+-spec(output(binary()) ->
+    ok).
+output(CompressedBin) ->
+    Fun = fun(Obj) -> io:format("~p~n",[Obj]) end,
+    ok = leo_ordning_reda_api:unpack(CompressedBin).
 ```
 
 Second, a server program is as follow.
@@ -87,9 +88,7 @@ stack(Node, Key, Object) ->
 -spec handle_send(atom(), _, binary()) -> ok.
 handle_send(Node, StackInfo, CompressedBin) ->
     ?debugVal({Node, length(StackInfo), byte_size(CompressedBin)}),
-    Res = rpc:call(Node, leo_ordning_reda_test_client, print, [CompressedBin]),
-    ?debugVal(Res),
-    ok.
+    rpc:call(Node, leo_ordning_reda_test_client, output, [CompressedBin]).
 
 -spec handle_fail(atom(), _) -> ok.
 handle_fail(Node, StackInfo) ->

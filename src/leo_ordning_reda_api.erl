@@ -30,7 +30,7 @@
 -export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
          stack/3, stack/4,
-         pack/1, unpack/1]).
+         pack/1, unpack/2]).
 
 -define(PREFIX, "leo_ord_reda_").
 
@@ -133,7 +133,8 @@ stack(Unit, AddrId, Key, Object) ->
 
 %% @doc Pack an object
 %%
--spec pack(any()) -> {ok, binary()} | {error, _}.
+-spec(pack(any()) ->
+             {ok, binary()} | {error, _}).
 pack(Object) ->
     ObjBin = term_to_binary(Object),
     SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
@@ -148,20 +149,28 @@ pack(Object) ->
 
 %% @doc Unpack an object
 %%
--spec unpack(binary) -> [any()].
-unpack(CompressedBin) ->
+-spec(unpack(binary(), function()) ->
+             ok).
+unpack(CompressedBin, Fun) ->
     {ok, Bin} = lz4:unpack(CompressedBin),
-    unpack2(Bin).
+    unpack_1(Bin, Fun).
 
--spec unpack2(binary) -> [any()].
-unpack2(<<>>) -> [];
-unpack2(Bin) ->
-    H1 = binary:part(Bin, {0, 2}),
-    Size1 = binary:decode_unsigned(H1),
-    Dat1 = binary_to_term(binary:part(Bin, {2, Size1})),
-    Rest = binary:part(Bin, {2 + Size1, byte_size(Bin) - 2 - Size1}),
-    Ret = unpack2(Rest),
-    [Dat1|Ret].
+-spec(unpack_1(binary(), function()) ->
+             ok).
+unpack_1(<<>>,_Fun) ->
+    ok;
+unpack_1(Bin, Fun) ->
+    %% Retrieve an object
+    H    = binary:part(Bin, {0, 2}),
+    Size = binary:decode_unsigned(H),
+    Obj  = binary_to_term(binary:part(Bin, {2, Size})),
+    %% Execute fun
+    Fun(Obj),
+
+    %% Retrieve rest objects
+    Rest = binary:part(Bin, {2 + Size, byte_size(Bin) - 2 - Size}),
+    unpack_1(Rest, Fun).
+
 
 %%--------------------------------------------------------------------
 %% INNTERNAL FUNCTIONS
