@@ -30,7 +30,7 @@
 
 %% Application callbacks
 -export([start_link/2, stop/1]).
--export([stack/4, exec/1, close/1]).
+-export([stack/3, exec/1, close/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -75,13 +75,12 @@ stop(Id) ->
 
 %% @doc Stacking objects
 %%
--spec(stack(atom(), integer() | 'undefined', string() | 'undefined', binary()) ->
+-spec(stack(atom(), any(), binary()) ->
              ok | {error, any()}).
-stack(Id, AddrId, Key, Obj) ->
-    gen_server:call(Id, {stack, #straw{addr_id = AddrId,
-                                       key     = Key,
-                                       object  = Obj,
-                                       size    = byte_size(Obj)}}, ?DEF_TIMEOUT).
+stack(Id, StrawId, Obj) ->
+    gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
+                                        object = Obj,
+                                        size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
@@ -255,30 +254,47 @@ code_change(_OldVsn, State, _Extra) ->
 %% INNTERNAL FUNCTION
 %%====================================================================
 %% @doc Stack an object
-%%
--spec stack_fun(#straw{}, #state{}) -> {ok, #state{}}.
+%% @private
+-spec stack_fun(#?STRAW{}, #state{}) -> {ok, #state{}}.
 stack_fun(Straw, #state{cur_size   = CurSize,
                         stack_obj  = StackObj_1,
                         stack_info = StackInfo_1} = State) ->
     List = [Key || {_, Key} <- StackInfo_1],
 
-    case lists:member(Straw#straw.key, List) of
+    case exists_straw_id(Straw, List) of
         true ->
             {ok, State};
         false ->
-            Bin = Straw#straw.object,
+            Bin = Straw#?STRAW.object,
             StackObj_2  = << StackObj_1/binary, Bin/binary>>,
-            StackInfo_2 = [{Straw#straw.addr_id,
-                            Straw#straw.key}  | StackInfo_1],
-            Size = Straw#straw.size + CurSize,
+            StackInfo_2 = [ Straw#?STRAW.id | StackInfo_1],
+            Size = Straw#?STRAW.size + CurSize,
             {ok, State#state{cur_size   = Size,
                              stack_obj  = StackObj_2,
                              stack_info = StackInfo_2}}
     end.
 
+%% @private
+exists_straw_id(#?STRAW{id = StrawId} = Straw, List) when is_tuple(StrawId) ->
+    ElSize = erlang:size(Straw#?STRAW.id),
+    exists_straw_id_1(ElSize, Straw, List);
+exists_straw_id(Straw, List) ->
+    lists:member(Straw#?STRAW.id, List).
+
+%% @private
+exists_straw_id_1(0,_,_) ->
+    false;
+exists_straw_id_1(Index, Straw, List) ->
+    case lists:member(erlang:element(Index, Straw#?STRAW.id), List) of
+        true ->
+            true;
+        false ->
+            exists_straw_id_1(Index - 1, Straw, List)
+    end.
+
 
 %% @doc Execute a function
-%%
+%% @private
 -spec(exec_fun({_, pid()}, atom(), atom(), binary(), list()) ->
              ok | {error, list()}).
 exec_fun(From, Module, Unit, StackObj, StackInf) ->

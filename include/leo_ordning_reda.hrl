@@ -50,6 +50,12 @@
                 object  :: binary(),  %% unstructured-data
                 size    :: integer()  %% object-size
                }).
+-record(straw_1, {id      :: any(),     %% straw-id
+                  object  :: binary(),  %% unstructured-data
+                  size    :: integer()  %% object-size
+                 }).
+-define(STRAW, 'straw_1').
+
 
 -define(env_send_after_interval(),
         case application:get_env(leo_ordning_reda, send_after_interval) of
