@@ -31,12 +31,15 @@
 %% Application callbacks
 %% ===================================================================
 
+-spec start(_,_) -> {'ok',pid()} | {'error',_}.
 start(_StartType, _StartArgs) ->
     leo_ordning_reda_sup:start_link().
 
+-spec prep_stop(_) -> 'ok'.
 prep_stop(_State) ->
     ok = leo_ordning_reda_sup:stop(),
     ok.
 
+-spec stop(_) -> 'ok'.
 stop(_State) ->
     ok.

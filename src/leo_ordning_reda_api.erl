@@ -29,7 +29,7 @@
 %% Application callbacks
 -export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
-         stack/3, stack/4]).
+         stack/3, pack/1, unpack/2]).
 
 -define(PREFIX, "leo_ord_reda_").
 
@@ -114,21 +114,56 @@ has_container(Unit) ->
 
 %% @doc Stack an object into the proc
 %%
--spec(stack(atom(), string(), binary()) ->
+-spec(stack(atom(), any(), binary()) ->
              ok | {error, any()}).
-stack(Unit, Key, Object) ->
-    stack(Unit, -1, Key, Object).
-
--spec(stack(atom(), integer(), string(), binary()) ->
-             ok | {error, any()}).
-stack(Unit, AddrId, Key, Object) ->
+stack(Unit, StrawId, Object) ->
     case has_container(Unit) of
         true ->
             Id = gen_id(Unit),
-            leo_ordning_reda_server:stack(Id, AddrId, Key, Object);
+            leo_ordning_reda_server:stack(Id, StrawId, Object);
         false ->
             {error, undefined}
     end.
+
+%% @doc Pack an object
+%%
+-spec(pack(any()) ->
+             {ok, binary()} | {error, _}).
+pack(Object) ->
+    ObjBin = term_to_binary(Object),
+    SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
+    case byte_size(SizeBin) of
+        1 ->
+            {ok, <<0/integer, SizeBin/binary, ObjBin/binary>>};
+        2 ->
+            {ok, <<SizeBin/binary, ObjBin/binary>>};
+        _ ->
+            {error, "too big object!"}
+    end.
+
+%% @doc Unpack an object
+%%
+-spec(unpack(binary(), function()) ->
+             ok).
+unpack(CompressedBin, Fun) ->
+    {ok, Bin} = lz4:unpack(CompressedBin),
+    unpack_1(Bin, Fun).
+
+-spec(unpack_1(binary(), function()) ->
+             ok).
+unpack_1(<<>>,_Fun) ->
+    ok;
+unpack_1(Bin, Fun) ->
+    %% Retrieve an object
+    H    = binary:part(Bin, {0, 2}),
+    Size = binary:decode_unsigned(H),
+    Obj  = binary_to_term(binary:part(Bin, {2, Size})),
+    %% Execute fun
+    Fun(Obj),
+
+    %% Retrieve rest objects
+    Rest = binary:part(Bin, {2 + Size, byte_size(Bin) - 2 - Size}),
+    unpack_1(Rest, Fun).
 
 
 %%--------------------------------------------------------------------
@@ -164,8 +199,7 @@ start_app() ->
 
 %% @doc Generate Id
 %%
--spec(gen_id(atom()) ->
-             string()).
+-spec(gen_id(atom()|string()) -> atom()).
 gen_id(Unit) ->
     Unit_1 = case is_atom(Unit) of
                  true  -> atom_to_list(Unit);
