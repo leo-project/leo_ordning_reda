@@ -1,6 +1,13 @@
 CHANGELOG
 =========
 
+0.10.4 (June 19, 2014)
+======================
+
+* Improved
+    * Removed depending on LeoFS's codes
+
+
 0.10.3 (May 7, 2014)
 =====================
 
