@@ -8,3 +8,4 @@ priv
 .leo_*_dialyzer_plt
 leo_*.dot
 work
+.rebar/
