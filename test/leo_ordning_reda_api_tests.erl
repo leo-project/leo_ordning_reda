@@ -154,15 +154,15 @@ remove_procs() ->
     %% === Check ===
     ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
     {ok, _Size_1} = loop(1000, Node0, 0),
-    timer:sleep(2000),
+    timer:sleep(5000),
 
-    ok = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
+    _ = leo_ordning_reda_stack:start_link(Node0, ?BUF_SIZE, ?TIMEOUT),
     {ok, _Size_2} = loop(3, Node0, 0),
-    timer:sleep(2000),
+    timer:sleep(5000),
 
     ok = leo_ordning_reda_stack:start_link(Node1, ?BUF_SIZE, ?TIMEOUT),
     {ok, _Size_3} = loop(1000, Node1, 0),
-    timer:sleep(2000),
+    timer:sleep(5000),
 
     %% === Terminate procs ===
     %% stop network
@@ -181,7 +181,7 @@ loop(Index, Node, Sum) ->
     Key = lists:append(["key_", integer_to_list(Index)]),
     Obj = crypto:rand_bytes(erlang:phash2(Index, 1024)),
     Size = erlang:byte_size(Obj),
-    ok  = leo_ordning_reda_api:stack(Node, {-1, Key}, Obj),
+    _ = leo_ordning_reda_api:stack(Node, {-1, Key}, Obj),
     loop(Index - 1, Node, Sum + Size).
 
 -endif.
