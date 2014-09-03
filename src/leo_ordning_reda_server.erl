@@ -225,14 +225,14 @@ handle_cast(_Msg, State) ->
 %%                                       {noreply, State, Timeout} |
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
+handle_info(timeout, #state{is_sending = true,
+                            timeout = Timeout} = State) ->
+    {noreply, State, Timeout};
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State, Timeout};
-handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, State) ->
-    erlang:demonitor(MonitorRef),
-    {noreply, State#state{is_sending = false}};
 handle_info(timeout, #state{cur_size = CurSize,
                             times    = Times,
                             timeout  = Timeout} = State) when CurSize == 0 ->
@@ -242,6 +242,9 @@ handle_info(timeout, #state{id = Id,
                             timeout  = Timeout} = State) when CurSize > 0 ->
     timer:apply_after(100, ?MODULE, exec, [Id]),
     {noreply, State#state{times = 0}, Timeout};
+handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, #state{timeout = Timeout} = State) ->
+    erlang:demonitor(MonitorRef),
+    {noreply, State#state{is_sending = false}, Timeout};
 handle_info(_Info, State) ->
     {noreply, State}.
 
