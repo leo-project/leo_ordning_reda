@@ -176,7 +176,8 @@ handle_call({stack, Straw}, From, #state{unit     = Unit,
             {noreply, NewState#state{cur_size   = 0,
                                      stack_obj  = <<>>,
                                      stack_info = [],
-                                     times = 0}, Timeout};
+                                     times      = 0,
+                                     is_sending = true}, Timeout};
         {ok, NewState} ->
             {reply, ok, NewState#state{times = 0}, Timeout}
     end;
