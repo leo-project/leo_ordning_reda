@@ -40,18 +40,19 @@
 
 -define(DEF_TIMEOUT, 30000).
 
--record(state, {id     :: atom(),
+-record(state, {id     :: atom(), %% container-id
                 unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
-                buf_size = 0     :: non_neg_integer(), %% size of buffer
-                cur_size = 0     :: non_neg_integer(), %% size of current stacked objects
-                stack_obj = <<>> :: binary(),      %% stacked objects
-                stack_info = []  :: list(),        %% list of stacked object-info
-                timeout = 0      :: non_neg_integer(), %% stacking timeout
-                times   = 0      :: integer(),     %% NOT execution times
-                tmp_stacked_obj  :: string(),      %% Temporary stacked file path - obj
-                tmp_stacked_inf  :: string(),      %% Temporary stacked file path - info
-                tmp_file_handler :: pid()          %% Temporary file handler
+                buf_size = 0         :: non_neg_integer(), %% size of buffer
+                cur_size = 0         :: non_neg_integer(), %% size of current stacked objects
+                stack_obj = <<>>     :: binary(),          %% stacked objects
+                stack_info = []      :: [term()],          %% list of stacked object-info
+                timeout = 0          :: non_neg_integer(), %% stacking timeout
+                times   = 0          :: integer(),         %% NOT execution times
+                tmp_stacked_obj = [] :: string(),          %% Temporary stacked file path - object
+                tmp_stacked_inf = [] :: string(),          %% Temporary stacked file path - info
+                tmp_file_handler     :: pid(),             %% Temporary file handler
+                is_sending = false   :: boolean()          %% is sending a stacked object?
                }).
 
 
@@ -128,7 +129,8 @@ init([Id, #stack_info{unit     = Unit,
                    timeout  = Timeout,
                    tmp_stacked_obj = StackedObj,
                    tmp_stacked_inf = StackedInf,
-                   tmp_file_handler = HandlerObj
+                   tmp_file_handler = HandlerObj,
+                   is_sending = false
                   },
     State_1 = case file:read_file_info(StackedObj) of
                   {ok, #file_info{size = Size}} when Size > 0 ->
@@ -154,6 +156,9 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 
+handle_call({stack,_Straw},_From, #state{is_sending = true,
+                                         timeout  = Timeout} = State) ->
+    {reply, {error, sending_data_to_remote}, State#state{times = 0}, Timeout};
 handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
                                          buf_size = BufSize,
@@ -163,9 +168,10 @@ handle_call({stack, Straw}, From, #state{unit     = Unit,
                     stack_obj  = StackObj,
                     stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
-            spawn(fun() ->
-                          exec_fun(From, Module, Unit, StackObj, StackInfo)
-                  end),
+            Pid = spawn(fun() ->
+                                exec_fun(From, Module, Unit, StackObj, StackInfo)
+                        end),
+            _MonitorRef = erlang:monitor(process, Pid),
             garbage_collect(self()),
             {noreply, NewState#state{cur_size   = 0,
                                      stack_obj  = <<>>,
@@ -219,6 +225,9 @@ handle_cast(_Msg, State) ->
 %%                                       {noreply, State, Timeout} |
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
+handle_info(timeout, #state{is_sending = true,
+                            timeout = Timeout} = State) ->
+    {noreply, State, Timeout};
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
@@ -233,6 +242,9 @@ handle_info(timeout, #state{id = Id,
                             timeout  = Timeout} = State) when CurSize > 0 ->
     timer:apply_after(100, ?MODULE, exec, [Id]),
     {noreply, State#state{times = 0}, Timeout};
+handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, #state{timeout = Timeout} = State) ->
+    erlang:demonitor(MonitorRef),
+    {noreply, State#state{is_sending = false}, Timeout};
 handle_info(_Info, State) ->
     {noreply, State}.
 
