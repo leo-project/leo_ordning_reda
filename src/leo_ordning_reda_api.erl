@@ -65,8 +65,9 @@ stop() ->
 
 %% @doc Add a container into the App
 %%
--spec(add_container(atom(), list()) ->
-             ok | {error, any()}).
+-spec(add_container(Unit, Options) ->
+             ok | {error, any()} when Unit :: atom(),
+                                      Options :: [any()]).
 add_container(Unit, Options) ->
     Id = gen_id(Unit),
     Module  = leo_misc:get_value('module',      Options),
@@ -94,8 +95,8 @@ add_container(Unit, Options) ->
 
 %% @doc Remove a container from the App
 %%
--spec(remove_container(atom()) ->
-             ok | {error, any()}).
+-spec(remove_container(Unit) ->
+             ok | {error, any()} when Unit :: atom()).
 remove_container(Unit) ->
     Id = gen_id(Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
@@ -106,16 +107,18 @@ remove_container(Unit) ->
 
 %% @doc Has a container into the App
 %%
--spec(has_container(atom()) ->
-             true | false).
+-spec(has_container(Unit) ->
+             true | false when Unit :: atom()).
 has_container(Unit) ->
     whereis(gen_id(Unit)) /= undefined.
 
 
 %% @doc Stack an object into the proc
 %%
--spec(stack(atom(), any(), binary()) ->
-             ok | {error, any()}).
+-spec(stack(Unit, StrawId, Object) ->
+             ok | {error, any()} when Unit :: atom(),
+                                      StrawId :: any(),
+                                      Object :: binary()).
 stack(Unit, StrawId, Object) ->
     case has_container(Unit) of
         true ->
@@ -127,8 +130,9 @@ stack(Unit, StrawId, Object) ->
 
 %% @doc Pack an object
 %%
--spec(pack(any()) ->
-             {ok, binary()} | {error, _}).
+-spec(pack(Object) ->
+             {ok, Bin} | {error, _} when Object :: any(),
+                                         Bin :: binary()).
 pack(Object) ->
     ObjBin = term_to_binary(Object),
     SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
@@ -143,14 +147,16 @@ pack(Object) ->
 
 %% @doc Unpack an object
 %%
--spec(unpack(binary(), function()) ->
-             ok).
+-spec(unpack(CompressedBin, Fun) ->
+             ok when CompressedBin :: binary(),
+                     Fun :: function()).
 unpack(CompressedBin, Fun) ->
     {ok, Bin} = lz4:unpack(CompressedBin),
     unpack_1(Bin, Fun).
 
--spec(unpack_1(binary(), function()) ->
-             ok).
+-spec(unpack_1(Bin, Fun) ->
+             ok when Bin :: binary(),
+                     Fun :: function()).
 unpack_1(<<>>,_Fun) ->
     ok;
 unpack_1(Bin, Fun) ->
@@ -199,7 +205,7 @@ start_app() ->
 
 %% @doc Generate Id
 %%
--spec(gen_id(atom()|string()) -> atom()).
+-spec(gen_id(Unit) -> atom() when Unit :: atom()|string()).
 gen_id(Unit) ->
     Unit_1 = case is_atom(Unit) of
                  true  -> atom_to_list(Unit);
