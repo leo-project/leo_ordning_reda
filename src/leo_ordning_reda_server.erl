@@ -76,8 +76,10 @@ stop(Id) ->
 
 %% @doc Stacking objects
 %%
--spec(stack(atom(), any(), binary()) ->
-             ok | {error, any()}).
+-spec(stack(Id, StrawId, ObjBin) ->
+             ok | {error, any()} when Id :: atom(),
+                                      StrawId :: any(),
+                                      ObjBin :: binary()).
 stack(Id, StrawId, Obj) ->
     gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
                                         object = Obj,
@@ -86,16 +88,16 @@ stack(Id, StrawId, Obj) ->
 
 %% @doc Send stacked objects to remote-node(s).
 %%
--spec(exec(atom()) ->
-             ok | {error, any()}).
+-spec(exec(Id) ->
+             ok | {error, any()} when Id :: atom()).
 exec(Id) ->
     gen_server:call(Id, exec, ?DEF_TIMEOUT).
 
 
 %% @doc Close a stacked file
 %%
--spec(close(atom()) ->
-             ok | {error, any()}).
+-spec(close(Id) ->
+             ok | {error, any()} when Id :: atom()).
 close(Id) ->
     gen_server:call(Id, close, ?DEF_TIMEOUT).
 
@@ -268,7 +270,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% @doc Stack an object
 %% @private
--spec stack_fun(#?STRAW{}, #state{}) -> {ok, #state{}}.
+-spec(stack_fun(Straw, State) ->
+             {ok, NextState} when Straw :: #?STRAW{},
+                                  State :: #state{},
+                                  NextState :: #state{}).
 stack_fun(Straw, #state{cur_size   = CurSize,
                         stack_obj  = StackObj_1,
                         stack_info = StackInfo_1} = State) ->
@@ -308,8 +313,12 @@ exists_straw_id_1(Index, Straw, List) ->
 
 %% @doc Execute a function
 %% @private
--spec(exec_fun({_, pid()}, atom(), atom(), binary(), list()) ->
-             ok | {error, list()}).
+-spec(exec_fun(From, Module, Unit, StackObj, StackInf) ->
+             ok | {error, any()} when From :: {pid(), _},
+                                       Module :: module(),
+                                       Unit :: atom(),
+                                       StackObj :: binary(),
+                                       StackInf :: [any()]).
 exec_fun(From, Module, Unit, StackObj, StackInf) ->
     %% Compress object-list
     Reply = case catch lz4:pack(StackObj) of
