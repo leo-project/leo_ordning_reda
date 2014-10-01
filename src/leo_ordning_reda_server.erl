@@ -60,7 +60,7 @@
 %% API
 %% ===================================================================
 %% Function: start_link() -> {ok,Pid} | ignore | {error,Error}
-%% Description: Starts the server
+%% Description: Start the server
 -spec(start_link(atom(), #stack_info{}) ->
              ok | {error, any()}).
 start_link(Id, StackInfo) ->
@@ -74,7 +74,7 @@ stop(Id) ->
     gen_server:call(Id, stop, ?DEF_TIMEOUT).
 
 
-%% @doc Stacking objects
+%% @doc Stack objects
 %%
 -spec(stack(Id, StrawId, ObjBin) ->
              ok | {error, any()} when Id :: atom(),

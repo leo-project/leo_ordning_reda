@@ -63,7 +63,7 @@ stop() ->
     leo_ordning_reda_sup:stop().
 
 
-%% @doc Add a container into the App
+%% @doc Add the container into the App
 %%
 -spec(add_container(Unit, Options) ->
              ok | {error, any()} when Unit :: atom(),
@@ -93,7 +93,7 @@ add_container(Unit, Options) ->
     end.
 
 
-%% @doc Remove a container from the App
+%% @doc Remove the container from the App
 %%
 -spec(remove_container(Unit) ->
              ok | {error, any()} when Unit :: atom()).
@@ -105,7 +105,7 @@ remove_container(Unit) ->
     ok.
 
 
-%% @doc Has a container into the App
+%% @doc Check whether the container exists
 %%
 -spec(has_container(Unit) ->
              true | false when Unit :: atom()).
@@ -113,7 +113,7 @@ has_container(Unit) ->
     whereis(gen_id(Unit)) /= undefined.
 
 
-%% @doc Stack an object into the proc
+%% @doc Stack the object into the container
 %%
 -spec(stack(Unit, StrawId, Object) ->
              ok | {error, any()} when Unit :: atom(),
@@ -128,7 +128,7 @@ stack(Unit, StrawId, Object) ->
             {error, undefined}
     end.
 
-%% @doc Pack an object
+%% @doc Pack the object
 %%
 -spec(pack(Object) ->
              {ok, Bin} | {error, _} when Object :: any(),
@@ -145,7 +145,7 @@ pack(Object) ->
             {error, "too big object!"}
     end.
 
-%% @doc Unpack an object
+%% @doc Unpack the object
 %%
 -spec(unpack(CompressedBin, Fun) ->
              ok when CompressedBin :: binary(),
