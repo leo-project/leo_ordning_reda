@@ -18,6 +18,9 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
+%% @doc The ordning-reda's API
+%% @reference [https://github.com/leo-project/leo_ordning_reda/blob/master/src/leo_ordning_reda_api.erl]
+%% @end
 %%======================================================================
 -module(leo_ordning_reda_api).
 -author('Yosuke Hara').
@@ -66,8 +69,8 @@ stop() ->
 %% @doc Add the container into the App
 %%
 -spec(add_container(Unit, Options) ->
-             ok | {error, any()} when Unit :: atom(),
-                                      Options :: [any()]).
+             ok | {error, any()} when Unit::atom(),
+                                      Options::[any()]).
 add_container(Unit, Options) ->
     Id = gen_id(Unit),
     Module  = leo_misc:get_value('module',      Options),
@@ -96,7 +99,7 @@ add_container(Unit, Options) ->
 %% @doc Remove the container from the App
 %%
 -spec(remove_container(Unit) ->
-             ok | {error, any()} when Unit :: atom()).
+             ok | {error, any()} when Unit::atom()).
 remove_container(Unit) ->
     Id = gen_id(Unit),
     catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
@@ -108,7 +111,7 @@ remove_container(Unit) ->
 %% @doc Check whether the container exists
 %%
 -spec(has_container(Unit) ->
-             true | false when Unit :: atom()).
+             true | false when Unit::atom()).
 has_container(Unit) ->
     whereis(gen_id(Unit)) /= undefined.
 
@@ -116,9 +119,9 @@ has_container(Unit) ->
 %% @doc Stack the object into the container
 %%
 -spec(stack(Unit, StrawId, Object) ->
-             ok | {error, any()} when Unit :: atom(),
-                                      StrawId :: any(),
-                                      Object :: binary()).
+             ok | {error, any()} when Unit::atom(),
+                                      StrawId::any(),
+                                      Object::binary()).
 stack(Unit, StrawId, Object) ->
     case has_container(Unit) of
         true ->
@@ -131,8 +134,8 @@ stack(Unit, StrawId, Object) ->
 %% @doc Pack the object
 %%
 -spec(pack(Object) ->
-             {ok, Bin} | {error, _} when Object :: any(),
-                                         Bin :: binary()).
+             {ok, Bin} | {error, _} when Object::any(),
+                                         Bin::binary()).
 pack(Object) ->
     ObjBin = term_to_binary(Object),
     SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
@@ -148,8 +151,8 @@ pack(Object) ->
 %% @doc Unpack the object
 %%
 -spec(unpack(CompressedBin, Fun) ->
-             ok when CompressedBin :: binary(),
-                     Fun :: function()).
+             ok when CompressedBin::binary(),
+                     Fun::function()).
 unpack(CompressedBin, Fun) ->
     {ok, Bin} = lz4:unpack(CompressedBin),
     unpack_1(Bin, Fun).
@@ -205,7 +208,7 @@ start_app() ->
 
 %% @doc Generate Id
 %%
--spec(gen_id(Unit) -> atom() when Unit :: atom()|string()).
+-spec(gen_id(Unit) -> atom() when Unit::atom()|string()).
 gen_id(Unit) ->
     Unit_1 = case is_atom(Unit) of
                  true  -> atom_to_list(Unit);

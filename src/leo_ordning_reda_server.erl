@@ -18,6 +18,9 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
+%% @doc The ordning-reda server
+%% @reference [https://github.com/leo-project/leo_ordning_reda/blob/master/src/leo_ordning_reda_server.erl]
+%% @end
 %%======================================================================
 -module(leo_ordning_reda_server).
 -author('Yosuke Hara').
@@ -59,27 +62,27 @@
 %% ===================================================================
 %% API
 %% ===================================================================
-%% Function: start_link() -> {ok,Pid} | ignore | {error,Error}
-%% Description: Start the server
--spec(start_link(atom(), #stack_info{}) ->
-             ok | {error, any()}).
+%% @doc Start the server
+-spec(start_link(Id, StackInfo) ->
+             ok | {error, any()} when Id::atom(),
+                                      StackInfo::#stack_info{}).
 start_link(Id, StackInfo) ->
     gen_server:start_link({local, Id}, ?MODULE,
                           [Id, StackInfo], []).
 
+
 %% @doc Stop this server
-%%
--spec(stop(atom()) -> ok).
+-spec(stop(Id) ->
+             ok when Id::atom()).
 stop(Id) ->
     gen_server:call(Id, stop, ?DEF_TIMEOUT).
 
 
 %% @doc Stack objects
-%%
 -spec(stack(Id, StrawId, ObjBin) ->
-             ok | {error, any()} when Id :: atom(),
-                                      StrawId :: any(),
-                                      ObjBin :: binary()).
+             ok | {error, any()} when Id::atom(),
+                                      StrawId::any(),
+                                      ObjBin::binary()).
 stack(Id, StrawId, Obj) ->
     gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
                                         object = Obj,
@@ -89,7 +92,7 @@ stack(Id, StrawId, Obj) ->
 %% @doc Send stacked objects to remote-node(s).
 %%
 -spec(exec(Id) ->
-             ok | {error, any()} when Id :: atom()).
+             ok | {error, any()} when Id::atom()).
 exec(Id) ->
     gen_server:call(Id, exec, ?DEF_TIMEOUT).
 
@@ -97,7 +100,7 @@ exec(Id) ->
 %% @doc Close a stacked file
 %%
 -spec(close(Id) ->
-             ok | {error, any()} when Id :: atom()).
+             ok | {error, any()} when Id::atom()).
 close(Id) ->
     gen_server:call(Id, close, ?DEF_TIMEOUT).
 
@@ -105,11 +108,7 @@ close(Id) ->
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
-%% Function: init(Args) -> {ok, State}          |
-%%                         {ok, State, Timeout} |
-%%                         ignore               |
-%%                         {stop, Reason}
-%% Description: Initiates the server
+%% @doc Initiates the server
 init([Id, #stack_info{unit     = Unit,
                       module   = Module,
                       buf_size = BufSize,
@@ -154,13 +153,14 @@ init([Id, #stack_info{unit     = Unit,
     {ok, State_1, Timeout}.
 
 
+%% @doc gen_server callback - Module:handle_call(Request, From, State) -> Result
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
-
 
 handle_call({stack,_Straw},_From, #state{is_sending = true,
                                          timeout  = Timeout} = State) ->
     {reply, {error, sending_data_to_remote}, State#state{times = 0}, Timeout};
+
 handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
                                          buf_size = BufSize,
@@ -216,51 +216,53 @@ handle_call(close,_From, #state{stack_info = StackInfo,
     {reply, ok, State, Timeout}.
 
 
-%% Function: handle_cast(Msg, State) -> {noreply, State}          |
-%%                                      {noreply, State, Timeout} |
-%%                                      {stop, Reason, State}
-%% Description: Handling cast message
+%% @doc Handling cast message
+%% <p>
+%% gen_server callback - Module:handle_cast(Request, State) -> Result.
+%% </p>
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
-%% Function: handle_info(Info, State) -> {noreply, State}          |
-%%                                       {noreply, State, Timeout} |
-%%                                       {stop, Reason, State}
-%% Description: Handling all non call/cast messages
+%% @doc Handling all non call/cast messages
+%% <p>
+%% gen_server callback - Module:handle_info(Info, State) -> Result.
+%% </p>
 handle_info(timeout, #state{is_sending = true,
                             timeout = Timeout} = State) ->
     {noreply, State, Timeout};
+
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State, Timeout};
+
 handle_info(timeout, #state{cur_size = CurSize,
                             times    = Times,
                             timeout  = Timeout} = State) when CurSize == 0 ->
     {noreply, State#state{times = Times + 1}, Timeout};
+
 handle_info(timeout, #state{id = Id,
                             cur_size = CurSize,
                             timeout  = Timeout} = State) when CurSize > 0 ->
     timer:apply_after(100, ?MODULE, exec, [Id]),
     {noreply, State#state{times = 0}, Timeout};
+
 handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, #state{timeout = Timeout} = State) ->
     erlang:demonitor(MonitorRef),
     {noreply, State#state{is_sending = false}, Timeout};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
-%% Function: terminate(Reason, State) -> void()
-%% Description: This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any necessary
-%% cleaning up. When it returns, the gen_server terminates with Reason.
-%% The return value is ignored.
+%% @doc This function is called by a gen_server when it is about to
+%%      terminate. It should be the opposite of Module:init/1 and do any necessary
+%%      cleaning up. When it returns, the gen_server terminates with Reason.
 terminate(_Reason, _State) ->
     ok.
 
-%% Func: code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% Description: Convert process state when code is changed
+%% @doc Convert process state when code is changed
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -271,9 +273,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Stack an object
 %% @private
 -spec(stack_fun(Straw, State) ->
-             {ok, NextState} when Straw :: #?STRAW{},
-                                  State :: #state{},
-                                  NextState :: #state{}).
+             {ok, NextState} when Straw::#?STRAW{},
+                                  State::#state{},
+                                  NextState::#state{}).
 stack_fun(Straw, #state{cur_size   = CurSize,
                         stack_obj  = StackObj_1,
                         stack_info = StackInfo_1} = State) ->
@@ -314,11 +316,11 @@ exists_straw_id_1(Index, Straw, List) ->
 %% @doc Execute a function
 %% @private
 -spec(exec_fun(From, Module, Unit, StackObj, StackInf) ->
-             ok | {error, any()} when From :: {pid(), _},
-                                       Module :: module(),
-                                       Unit :: atom(),
-                                       StackObj :: binary(),
-                                       StackInf :: [any()]).
+             ok | {error, any()} when From::{pid(), _},
+                                      Module::module(),
+                                      Unit::atom(),
+                                      StackObj::binary(),
+                                      StackInf::[any()]).
 exec_fun(From, Module, Unit, StackObj, StackInf) ->
     %% Compress object-list
     Reply = case catch lz4:pack(StackObj) of
