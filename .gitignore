@@ -9,3 +9,4 @@ priv
 leo_*.dot
 work
 .rebar/
+doc/

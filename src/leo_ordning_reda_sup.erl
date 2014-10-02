@@ -33,17 +33,9 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
-%% @spec () -> ok
-%% @doc start link.
-%% @end
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-
-%% @spec () -> ok |
-%%             not_started
-%% @doc stop process.
-%% @end
 stop() ->
     case whereis(?MODULE) of
         Pid when is_pid(Pid) == true ->
@@ -57,10 +49,6 @@ stop() ->
 %% ===================================================================
 %% Supervisor callbacks
 %% ===================================================================
-%% @spec (Params) -> ok
-%% @doc stop process.
-%% @end
-%% @private
 init([]) ->
     {ok, {{one_for_one, 5, 60}, []}}.
 

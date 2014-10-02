@@ -18,9 +18,7 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
-%% ---------------------------------------------------------------------
-%% Leo Ordning & Reda  - Behaviour.
-%% @doc
+%% @doc The ordning-reda's behaviour.
 %% @end
 %%======================================================================
 -module(leo_ordning_reda_behaviour).
