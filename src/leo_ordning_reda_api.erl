@@ -19,7 +19,7 @@
 %% under the License.
 %%
 %% @doc The ordning-reda's API
-%% @reference [https://github.com/leo-project/leo_ordning_reda/blob/master/src/leo_ordning_reda_api.erl]
+%% @reference https://github.com/leo-project/leo_ordning_reda/blob/master/src/leo_ordning_reda_api.erl
 %% @end
 %%======================================================================
 -module(leo_ordning_reda_api).
