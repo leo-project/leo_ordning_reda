@@ -23,7 +23,7 @@
 {application, leo_ordning_reda,
  [
   {description, "Leo ordning & reda"},
-  {vsn, "0.10.9"},
+  {vsn, "0.10.10"},
   {registered, []},
   {applications, [
                   kernel,
