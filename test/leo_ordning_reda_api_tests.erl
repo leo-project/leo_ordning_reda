@@ -65,8 +65,8 @@ teardown({Node0, Node1}) ->
     slave:stop(Node1),
 
     %% stop application
-    ok = leo_ordning_reda_sup:stop(),
-    ok = application:stop(leo_ordning_reda),
+    catch leo_ordning_reda_sup:stop(),
+    catch application:stop(leo_ordning_reda),
     ok.
 
 

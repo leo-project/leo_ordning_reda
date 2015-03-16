@@ -30,6 +30,8 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+-include_lib("eunit/include/eunit.hrl").
+
 %% ===================================================================
 %% API functions
 %% ===================================================================
@@ -60,8 +62,9 @@ init([]) ->
 %% @private
 close([]) ->
     ok;
-close([{Id,_Pid, worker, ['leo_ordning_reda_server' = Mod|_]}|T]) ->
-    ok = Mod:close(Id),
+close([{_Id, PId, worker, ['leo_ordning_reda_server'|_]}|T]) ->
+    catch supervisor:terminate_child(leo_ordning_reda_sup, PId),
+    catch supervisor:delete_child(leo_ordning_reda_sup, PId),
     close(T);
-close([_|T]) ->
+close([_H|T]) ->
     close(T).

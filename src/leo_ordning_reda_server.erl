@@ -32,7 +32,7 @@
 -include_lib("kernel/include/file.hrl").
 
 %% Application callbacks
--export([start_link/2, stop/1]).
+-export([start_link/2]).
 -export([stack/3, exec/1, close/1]).
 -export([init/1,
          handle_call/3,
@@ -67,90 +67,89 @@
              ok | {error, any()} when Id::atom(),
                                       StackInfo::#stack_info{}).
 start_link(Id, StackInfo) ->
-    gen_server:start_link({local, Id}, ?MODULE,
-                          [Id, StackInfo], []).
-
-
-%% @doc Stop this server
--spec(stop(Id) ->
-             ok when Id::atom()).
-stop(Id) ->
-    gen_server:call(Id, stop, ?DEF_TIMEOUT).
+    gen_server:start_link(?MODULE, [Id, StackInfo], []).
 
 
 %% @doc Stack objects
--spec(stack(Id, StrawId, ObjBin) ->
-             ok | {error, any()} when Id::atom(),
+-spec(stack(PId, StrawId, ObjBin) ->
+             ok | {error, any()} when PId::pid(),
                                       StrawId::any(),
                                       ObjBin::binary()).
-stack(Id, StrawId, Obj) ->
-    gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
-                                        object = Obj,
-                                        size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+stack(PId, StrawId, Obj) ->
+    gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
+                                         object = Obj,
+                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
 %%
--spec(exec(Id) ->
-             ok | {error, any()} when Id::atom()).
-exec(Id) ->
-    gen_server:call(Id, exec, ?DEF_TIMEOUT).
+-spec(exec(PId) ->
+             ok | {error, any()} when PId::pid()).
+exec(PId) ->
+    gen_server:call(PId, exec, ?DEF_TIMEOUT).
 
 
 %% @doc Close a stacked file
 %%
--spec(close(Id) ->
-             ok | {error, any()} when Id::atom()).
-close(Id) ->
-    gen_server:call(Id, close, ?DEF_TIMEOUT).
+-spec(close(PId) ->
+             ok | {error, any()} when PId::atom()).
+close(PId) ->
+    gen_server:call(PId, close, ?DEF_TIMEOUT).
 
 
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
 %% @doc Initiates the server
-init([Id, #stack_info{unit     = Unit,
-                      module   = Module,
-                      buf_size = BufSize,
-                      timeout  = Timeout,
-                      tmp_stacked_dir = TmpStackedDir
-                     }]) ->
-    _ = filelib:ensure_dir(TmpStackedDir),
-    StackedObj = filename:join([TmpStackedDir,
-                                lists:append([atom_to_list(Id), ".obj"])]),
-    StackedInf = filename:join([TmpStackedDir,
-                                lists:append([atom_to_list(Id), ".inf"])]),
-    {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
-    {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
-
+init([{_, Id}, #stack_info{unit     = Unit,
+                           module   = Module,
+                           buf_size = BufSize,
+                           timeout  = Timeout,
+                           tmp_stacked_dir = TmpStackedDir
+                          }]) ->
     State = #state{id       = Id,
                    unit     = Unit,
                    module   = Module,
                    buf_size = BufSize,
                    timeout  = Timeout,
-                   tmp_stacked_obj = StackedObj,
-                   tmp_stacked_inf = StackedInf,
-                   tmp_file_handler = HandlerObj,
-                   is_sending = false
-                  },
-    State_1 = case file:read_file_info(StackedObj) of
-                  {ok, #file_info{size = Size}} when Size > 0 ->
-                      case file:read_file(StackedObj) of
-                          {ok, Bin} ->
-                              case catch file:consult(StackedInf) of
-                                  {ok, Term} ->
-                                      State#state{stack_obj  = Bin,
-                                                  stack_info = Term};
+                   is_sending = false},
+
+    State_2 = case (TmpStackedDir /= [] andalso is_atom(Id)) of
+                  true ->
+                      _ = filelib:ensure_dir(TmpStackedDir),
+                      StackedObj = filename:join([TmpStackedDir,
+                                                  lists:append([atom_to_list(Id), ".obj"])]),
+                      StackedInf = filename:join([TmpStackedDir,
+                                                  lists:append([atom_to_list(Id), ".inf"])]),
+                      {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
+                      {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
+                      State_1 = State#state{tmp_stacked_obj = StackedObj,
+                                            tmp_stacked_inf = StackedInf,
+                                            tmp_file_handler = HandlerObj},
+
+                      case file:read_file_info(StackedObj) of
+                          {ok, #file_info{size = Size}} when Size > 0 ->
+                              case file:read_file(StackedObj) of
+                                  {ok, Bin} ->
+                                      case catch file:consult(StackedInf) of
+                                          {ok, Term} ->
+                                              State_1#state{stack_obj  = Bin,
+                                                            stack_info = Term};
+                                          _ ->
+                                              State_1
+                                      end;
                                   _ ->
-                                      State
+                                      State_1
                               end;
                           _ ->
-                              State
+                              State_1
                       end;
-                  _ ->
-                      State
+                  false ->
+                      State#state{tmp_stacked_obj  = undefined,
+                                  tmp_stacked_inf  = undefined,
+                                  tmp_file_handler = undefined}
               end,
-    {ok, State_1, Timeout}.
+    {ok, State_2, Timeout}.
 
 
 %% @doc gen_server callback - Module:handle_call(Request, From, State) -> Result
@@ -205,6 +204,10 @@ handle_call(exec, From, #state{unit     = Unit,
                           stack_info = [],
                           times = 0}, Timeout};
 
+handle_call(close,_From, #state{tmp_stacked_inf = undefined,
+                                timeout = Timeout} = State) ->
+    garbage_collect(self()),
+    {reply, ok, State, Timeout};
 handle_call(close,_From, #state{stack_info = StackInfo,
                                 stack_obj  = StackObj,
                                 tmp_stacked_inf  = StackedInf,

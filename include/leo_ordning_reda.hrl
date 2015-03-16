@@ -26,6 +26,12 @@
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
 -define(ETS_TAB_DIVIDE_PID,  leo_ordning_reda_divide_pid).
 
+-define(PROP_ORDRED_MOD,      'module').
+-define(PROP_ORDRED_BUF_SIZE, 'buffer_size').
+-define(PROP_ORDRED_TIMEOUT,  'timeout').
+-define(PROP_ORDRED_IS_COMP,  'is_compress_obj').
+
+
 -ifdef(TEST).
 -define(DEF_REMOVED_TIME, 2).
 -else.
@@ -38,11 +44,12 @@
 -define(DEF_TMP_STACKED_DIR, "work/ord_reda/").
 
 -record(stack_info, {
-          unit         :: atom(),     %% id of unit of stack
+          unit         :: term(),     %% id of unit of stack
           module       :: atom(),     %% callback module
           buf_size = 0 :: integer(),  %% buffer size
-          timeout  = 0 :: integer(),  %% buffering timeout
-          tmp_stacked_dir :: string() %% temporary stacked dir
+          is_compression_obj = true :: boolean(),  %% is compression stacked objects
+          timeout  = 0              :: integer(),  %% buffering timeout
+          tmp_stacked_dir = []      :: string()    %% temporary stacked dir
          }).
 
 -record(straw, {addr_id :: integer(), %% ring address id
