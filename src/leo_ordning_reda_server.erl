@@ -50,6 +50,7 @@
                 cur_size = 0         :: non_neg_integer(), %% size of current stacked objects
                 stack_obj = <<>>     :: binary(),          %% stacked objects
                 stack_info = []      :: [term()],          %% list of stacked object-info
+                is_compression_obj = true :: boolean(),    %% Is compression objects
                 timeout = 0          :: non_neg_integer(), %% stacking timeout
                 times   = 0          :: integer(),         %% NOT execution times
                 tmp_stacked_obj = [] :: string(),          %% Temporary stacked file path - object
@@ -101,17 +102,19 @@ close(PId) ->
 %% GEN_SERVER CALLBACKS
 %%====================================================================
 %% @doc Initiates the server
-init([{_, Id}, #stack_info{unit     = Unit,
-                           module   = Module,
+init([{_, Id}, #stack_info{unit = Unit,
+                           module = Module,
                            buf_size = BufSize,
-                           timeout  = Timeout,
+                           is_compression_obj = IsComp,
+                           timeout = Timeout,
                            tmp_stacked_dir = TmpStackedDir
                           }]) ->
-    State = #state{id       = Id,
-                   unit     = Unit,
-                   module   = Module,
+    State = #state{id = Id,
+                   unit = Unit,
+                   module = Module,
                    buf_size = BufSize,
-                   timeout  = Timeout,
+                   is_compression_obj = IsComp,
+                   timeout = Timeout,
                    is_sending = false},
 
     State_2 = case (TmpStackedDir /= [] andalso is_atom(Id)) of
@@ -163,14 +166,15 @@ handle_call({stack,_Straw},_From, #state{is_sending = true,
 handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
                                          buf_size = BufSize,
-                                         timeout  = Timeout} = State) ->
+                                         is_compression_obj = IsComp,
+                                         timeout = Timeout} = State) ->
     case stack_fun(Straw, State) of
         {ok, #state{cur_size   = CurSize,
                     stack_obj  = StackObj,
                     stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
             Pid = spawn(fun() ->
-                                exec_fun(From, Module, Unit, StackObj, StackInfo)
+                                exec_fun(From, Module, Unit, IsComp, StackObj, StackInfo)
                         end),
             _MonitorRef = erlang:monitor(process, Pid),
             garbage_collect(self()),
@@ -191,11 +195,12 @@ handle_call(exec,_From, #state{cur_size = 0,
                             stack_info = [],
                             times = 0}, Timeout};
 
-handle_call(exec, From, #state{unit     = Unit,
-                               module   = Module,
-                               timeout  = Timeout} = State) ->
+handle_call(exec, From, #state{unit   = Unit,
+                               module = Module,
+                               is_compression_obj = IsComp,
+                               timeout = Timeout} = State) ->
     spawn(fun() ->
-                  exec_fun(From, Module, Unit,
+                  exec_fun(From, Module, Unit, IsComp,
                            State#state.stack_obj, State#state.stack_info)
           end),
     garbage_collect(self()),
@@ -318,43 +323,46 @@ exists_straw_id_1(Index, Straw, List) ->
 
 %% @doc Execute a function
 %% @private
--spec(exec_fun(From, Module, Unit, StackObj, StackInf) ->
+-spec(exec_fun(From, Module, Unit, IsComp, StackObj, StackInf) ->
              ok | {error, any()} when From::{pid(), _},
                                       Module::module(),
                                       Unit::atom(),
+                                      IsComp::boolean(),
                                       StackObj::binary(),
                                       StackInf::[any()]).
-exec_fun(From, Module, Unit, StackObj, StackInf) ->
-    %% Compress object-list
-    Reply = case catch lz4:pack(StackObj) of
-                {ok, CompressedObjs} ->
-                    %% Send compressed objects
+exec_fun(From, Module, Unit, false = _IsComp, StackObj, StackInf) ->
+    exec_fun_1(From, Module, Unit, StackObj, StackInf);
+
+exec_fun(From, Module, Unit, true = _IsComp, StackObj, StackInf) ->
+    %% Compress objects
+    case catch lz4:pack(StackObj) of
+        {ok, CompressedObjs} ->
+            exec_fun_1(From, Module, Unit, CompressedObjs, StackInf);
+        {_, Cause} ->
+            Cause_1 = element(1, Cause),
+            gen_server:reply(From, {error, Cause_1})
+    end.
+
+%% @private
+exec_fun_1(From, Module, Unit, Objs, StackInf) ->
+    %% Send objects to the client
+    Reply = case catch erlang:apply(Module, handle_send,
+                                    [Unit, StackInf, Objs]) of
+                ok ->
+                    ok;
+                {_,_Cause} ->
                     case catch erlang:apply(
-                                 Module, handle_send,
-                                 [Unit, StackInf, CompressedObjs]) of
+                                 Module, handle_fail, [Unit, StackInf]) of
                         ok ->
-                            ok;
+                            void;
                         {_, Cause} ->
+                            Cause_1 = element(1, Cause),
                             error_logger:error_msg("~p,~p,~p,~p~n",
                                                    [{module, ?MODULE_STRING},
-                                                    {function, "exec_fun/5"},
-                                                    {line, ?LINE}, {body, Cause}]),
-                            case catch erlang:apply(
-                                         Module, handle_fail, [Unit, StackInf]) of
-                                ok ->
-                                    void;
-                                {_, Cause0} ->
-                                    Cause1 = element(1, Cause0),
-                                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                                           [{module, ?MODULE_STRING},
-                                                            {function, "exec_fun/5"},
-                                                            {line, ?LINE}, {body, Cause1}])
-                            end,
-                            {error, StackInf}
-                    end;
-                {_, Cause0} ->
-                    Cause1 = element(1, Cause0),
-                    {error, Cause1}
+                                                    {function, "exec_fun_1/5"},
+                                                    {line, ?LINE}, {body, Cause_1}])
+                    end,
+                    {error, StackInf}
             end,
     garbage_collect(self()),
     gen_server:reply(From, Reply).
