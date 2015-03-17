@@ -32,9 +32,11 @@
 %% Application callbacks
 -export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
-         stack/3, pack/1, unpack/2]).
+         stack/3, pack/1, unpack/2,
+         force_sending_obj/1
+        ]).
 
--define(PREFIX, "leo_ord_reda_").
+%% -define(PREFIX, "leo_ord_reda_").
 
 -ifdef(TEST).
 -define(out_put_info_log(_Fun, _Unit),
@@ -69,19 +71,21 @@ stop() ->
 %% @doc Add the container into the App
 %%
 -spec(add_container(Unit, Options) ->
-             ok | {error, any()} when Unit::atom(),
+             ok | {error, any()} when Unit::term(),
                                       Options::[any()]).
 add_container(Unit, Options) ->
     Id = gen_id(Unit),
-    Module  = leo_misc:get_value('module',      Options),
-    BufSize = leo_misc:get_value('buffer_size', Options, ?DEF_BUF_SIZE),
-    Timeout = leo_misc:get_value('timeout',     Options, ?REQ_TIMEOUT),
+    Module    = leo_misc:get_value(?PROP_ORDRED_MOD,      Options),
+    BufSize   = leo_misc:get_value(?PROP_ORDRED_BUF_SIZE, Options, ?DEF_BUF_SIZE),
+    Timeout   = leo_misc:get_value(?PROP_ORDRED_TIMEOUT,  Options, ?RCV_TIMEOUT),
+    IsCompObj = leo_misc:get_value(?PROP_ORDRED_IS_COMP,  Options, true),
     TmpStackedDir = ?env_temp_stacked_dir(),
 
     Args = [Id, #stack_info{unit     = Unit,
                             module   = Module,
                             buf_size = BufSize,
                             timeout  = Timeout,
+                            is_compression_obj = IsCompObj,
                             tmp_stacked_dir = TmpStackedDir
                            }],
     ChildSpec = {Id,
@@ -89,7 +93,14 @@ add_container(Unit, Options) ->
                  temporary, 2000, worker, [leo_ordning_reda_server]},
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
-        {ok, _Pid} ->
+        {ok, PId} ->
+            case catch ets:insert(?ETS_TAB_STACK_PID, {Unit, PId}) of
+                {'EXIT', Cause} ->
+                    {error, Cause};
+                true ->
+                    ok
+            end;
+        {error,{already_started,_PId}} ->
             ok;
         {error, Cause} ->
             {error, Cause}
@@ -99,37 +110,62 @@ add_container(Unit, Options) ->
 %% @doc Remove the container from the App
 %%
 -spec(remove_container(Unit) ->
-             ok | {error, any()} when Unit::atom()).
+             ok | {error, any()} when Unit::term()).
 remove_container(Unit) ->
-    Id = gen_id(Unit),
-    catch supervisor:terminate_child(leo_ordning_reda_sup, Id),
-    catch supervisor:delete_child(leo_ordning_reda_sup, Id),
-    ?out_put_info_log("remove_container/1", Unit),
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            catch supervisor:terminate_child(leo_ordning_reda_sup, PId),
+            catch supervisor:delete_child(leo_ordning_reda_sup, PId),
+            ?out_put_info_log("remove_container/1", Unit);
+        _ ->
+            void
+    end,
+
+    %% Remove the unnecessary record
+    case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
+        [Rec|_] ->
+            catch ets:delete_object(?ETS_TAB_STACK_PID, Rec),
+            ok;
+        _ ->
+            void
+    end,
     ok.
 
 
 %% @doc Check whether the container exists
 %%
 -spec(has_container(Unit) ->
-             true | false when Unit::atom()).
+             true | false when Unit::term()).
 has_container(Unit) ->
-    whereis(gen_id(Unit)) /= undefined.
+    case get_pid_by_unit(Unit) of
+        {ok,_} ->
+            true;
+        _ ->
+            false
+    end.
 
 
 %% @doc Stack the object into the container
 %%
 -spec(stack(Unit, StrawId, Object) ->
-             ok | {error, any()} when Unit::atom(),
+             ok | {error, any()} when Unit::term(),
                                       StrawId::any(),
                                       Object::binary()).
 stack(Unit, StrawId, Object) ->
     case has_container(Unit) of
         true ->
-            Id = gen_id(Unit),
-            leo_ordning_reda_server:stack(Id, StrawId, Object);
+            case get_pid_by_unit(Unit) of
+                {ok, PId} ->
+                    leo_ordning_reda_server:stack(PId, StrawId, Object);
+                not_found ->
+                    {error, undefined};
+                {error, Cause} ->
+                    {error, Cause}
+            end;
         false ->
             {error, undefined}
     end.
+
 
 %% @doc Pack the object
 %%
@@ -147,6 +183,7 @@ pack(Object) ->
         _ ->
             {error, "too big object!"}
     end.
+
 
 %% @doc Unpack the object
 %%
@@ -173,6 +210,21 @@ unpack_1(Bin, Fun) ->
     %% Retrieve rest objects
     Rest = binary:part(Bin, {2 + Size, byte_size(Bin) - 2 - Size}),
     unpack_1(Rest, Fun).
+
+
+%% @doc Force sending a stacked object to the client
+%%
+-spec(force_sending_obj(Unit) ->
+             ok | {error, any()} when Unit::term()).
+force_sending_obj(Unit) ->
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            leo_ordning_reda_server:exec(PId);
+        not_found ->
+            {error, undefined};
+        {error, Cause} ->
+            {error, Cause}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -207,11 +259,24 @@ start_app() ->
 
 
 %% @doc Generate Id
-%%
--spec(gen_id(Unit) -> atom() when Unit::atom()|string()).
+%% @private
+-spec(gen_id(Unit) -> atom() when Unit::term()).
 gen_id(Unit) ->
-    Unit_1 = case is_atom(Unit) of
-                 true  -> atom_to_list(Unit);
-                 false -> Unit
-             end,
-    list_to_atom(lists:append([?PREFIX, Unit_1])).
+    {leo_ordning_reda, Unit}.
+
+
+%% @doc Generate Id
+%% @private
+-spec(get_pid_by_unit(Unit) ->
+             {ok, pid()} |
+             not_found |
+             {error, any()} when Unit::term()).
+get_pid_by_unit(Unit) ->
+    case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
+        {'EXIT',Cause} ->
+            {error, Cause};
+        [] ->
+            not_found;
+        [{_,PId}|_] ->
+            {ok, PId}
+    end.
