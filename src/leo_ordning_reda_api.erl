@@ -32,7 +32,9 @@
 %% Application callbacks
 -export([start/0, stop/0,
          add_container/2, remove_container/1, has_container/1,
-         stack/3, pack/1, unpack/2]).
+         stack/3, pack/1, unpack/2,
+         force_sending_obj/1
+        ]).
 
 %% -define(PREFIX, "leo_ord_reda_").
 
@@ -119,6 +121,15 @@ remove_container(Unit) ->
         _ ->
             void
     end,
+
+    %% Remove the unnecessary record
+    case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
+        [Rec|_] ->
+            catch ets:delete_object(?ETS_TAB_STACK_PID, Rec),
+            ok;
+        _ ->
+            void
+    end,
     ok.
 
 
@@ -156,6 +167,7 @@ stack(Unit, StrawId, Object) ->
             {error, undefined}
     end.
 
+
 %% @doc Pack the object
 %%
 -spec(pack(Object) ->
@@ -172,6 +184,7 @@ pack(Object) ->
         _ ->
             {error, "too big object!"}
     end.
+
 
 %% @doc Unpack the object
 %%
@@ -198,6 +211,21 @@ unpack_1(Bin, Fun) ->
     %% Retrieve rest objects
     Rest = binary:part(Bin, {2 + Size, byte_size(Bin) - 2 - Size}),
     unpack_1(Rest, Fun).
+
+
+%% @doc Force sending a stacked object to the client
+%%
+-spec(force_sending_obj(Unit) ->
+             ok | {error, any()} when Unit::term()).
+force_sending_obj(Unit) ->
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            leo_ordning_reda_server:exec(PId);
+        not_found ->
+            {error, undefined};
+        {error, Cause} ->
+            {error, Cause}
+    end.
 
 
 %%--------------------------------------------------------------------

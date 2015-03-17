@@ -221,6 +221,16 @@ handle_call(close,_From, #state{stack_info = StackInfo,
     catch leo_file:file_unconsult(StackedInf, StackInfo),
     catch file:write(Handler, StackObj),
     garbage_collect(self()),
+    {reply, ok, State, Timeout};
+
+handle_call(force_sending_obj,_From, #state{stack_info = StackInfo,
+                                            stack_obj  = StackObj,
+                                            tmp_stacked_inf  = StackedInf,
+                                            tmp_file_handler = Handler,
+                                            timeout = Timeout} = State) ->
+    catch leo_file:file_unconsult(StackedInf, StackInfo),
+    catch file:write(Handler, StackObj),
+    garbage_collect(self()),
     {reply, ok, State, Timeout}.
 
 
