@@ -77,9 +77,8 @@ add_container(Unit, Options) ->
     Id = gen_id(Unit),
     Module    = leo_misc:get_value(?PROP_ORDRED_MOD,      Options),
     BufSize   = leo_misc:get_value(?PROP_ORDRED_BUF_SIZE, Options, ?DEF_BUF_SIZE),
-    Timeout   = leo_misc:get_value(?PROP_ORDRED_TIMEOUT,  Options, ?REQ_TIMEOUT),
+    Timeout   = leo_misc:get_value(?PROP_ORDRED_TIMEOUT,  Options, ?RCV_TIMEOUT),
     IsCompObj = leo_misc:get_value(?PROP_ORDRED_IS_COMP,  Options, true),
-
     TmpStackedDir = ?env_temp_stacked_dir(),
 
     Args = [Id, #stack_info{unit     = Unit,
