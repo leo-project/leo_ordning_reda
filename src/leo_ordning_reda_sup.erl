@@ -2,7 +2,7 @@
 %%
 %% Leo Ordning & Reda
 %%
-%% Copyright (c) 2012-2014 Rakuten, Inc.
+%% Copyright (c) 2012-2015 Rakuten, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -29,8 +29,6 @@
 
 %% Supervisor callbacks
 -export([init/1]).
-
--include_lib("eunit/include/eunit.hrl").
 
 %% ===================================================================
 %% API functions
@@ -62,9 +60,8 @@ init([]) ->
 %% @private
 close([]) ->
     ok;
-close([{_Id, PId, worker, ['leo_ordning_reda_server'|_]}|T]) ->
-    catch supervisor:terminate_child(leo_ordning_reda_sup, PId),
-    catch supervisor:delete_child(leo_ordning_reda_sup, PId),
+close([{Id,_Pid, worker, ['leo_ordning_reda_server' = Mod|_]}|T]) ->
+    ok = Mod:close(Id),
     close(T);
-close([_H|T]) ->
+close([_|T]) ->
     close(T).

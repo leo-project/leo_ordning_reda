@@ -2,7 +2,7 @@
 %%
 %% Leo Ordning & Reda
 %%
-%% Copyright (c) 2012-2014 Rakuten, Inc.
+%% Copyright (c) 2012-2015 Rakuten, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -32,7 +32,7 @@
 -include_lib("kernel/include/file.hrl").
 
 %% Application callbacks
--export([start_link/2]).
+-export([start_link/2, stop/1]).
 -export([stack/3, exec/1, close/1]).
 -export([init/1,
          handle_call/3,
@@ -68,90 +68,97 @@
              ok | {error, any()} when Id::atom(),
                                       StackInfo::#stack_info{}).
 start_link(Id, StackInfo) ->
-    gen_server:start_link(?MODULE, [Id, StackInfo], []).
+    gen_server:start_link({local, Id}, ?MODULE,
+                          [Id, StackInfo], []).
+
+
+%% @doc Stop this server
+-spec(stop(Id) ->
+             ok when Id::atom()).
+stop(Id) ->
+    gen_server:call(Id, stop, ?DEF_TIMEOUT).
 
 
 %% @doc Stack objects
--spec(stack(PId, StrawId, ObjBin) ->
-             ok | {error, any()} when PId::pid(),
+-spec(stack(Id, StrawId, ObjBin) ->
+             ok | {error, any()} when Id::atom(),
                                       StrawId::any(),
                                       ObjBin::binary()).
-stack(PId, StrawId, Obj) ->
-    gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
-                                         object = Obj,
-                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+stack(Id, StrawId, Obj) ->
+    gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
+                                        object = Obj,
+                                        size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
 %%
--spec(exec(PId) ->
-             ok | {error, any()} when PId::pid()).
-exec(PId) ->
-    gen_server:call(PId, exec, ?DEF_TIMEOUT).
+-spec(exec(Id) ->
+             ok | {error, any()} when Id::atom()).
+exec(Id) ->
+    gen_server:call(Id, exec, ?DEF_TIMEOUT).
 
 
 %% @doc Close a stacked file
 %%
--spec(close(PId) ->
-             ok | {error, any()} when PId::atom()).
-close(PId) ->
-    gen_server:call(PId, close, ?DEF_TIMEOUT).
+-spec(close(Id) ->
+             ok | {error, any()} when Id::atom()).
+close(Id) ->
+    gen_server:call(Id, close, ?DEF_TIMEOUT).
 
 
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
 %% @doc Initiates the server
-init([{_, Id}, #stack_info{unit = Unit,
-                           module = Module,
-                           buf_size = BufSize,
-                           is_compression_obj = IsComp,
-                           timeout = Timeout,
-                           tmp_stacked_dir = TmpStackedDir
-                          }]) ->
-    State = #state{id = Id,
-                   unit = Unit,
-                   module = Module,
+init([Id, #stack_info{unit = Unit,
+                      module = Module,
+                      buf_size = BufSize,
+                      is_compression_obj = IsComp,
+                      timeout = Timeout,
+                      tmp_stacked_dir = TmpStackedDir
+                     }]) ->
+    State = #state{id       = Id,
+                   unit     = Unit,
+                   module   = Module,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
-                   timeout = Timeout,
-                   is_sending = false},
-
-    State_2 = case (TmpStackedDir /= [] andalso is_atom(Id)) of
-                  true ->
-                      _ = filelib:ensure_dir(TmpStackedDir),
-                      StackedObj = filename:join([TmpStackedDir,
-                                                  lists:append([atom_to_list(Id), ".obj"])]),
-                      StackedInf = filename:join([TmpStackedDir,
-                                                  lists:append([atom_to_list(Id), ".inf"])]),
-                      {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
-                      {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
-                      State_1 = State#state{tmp_stacked_obj = StackedObj,
-                                            tmp_stacked_inf = StackedInf,
-                                            tmp_file_handler = HandlerObj},
-
-                      case file:read_file_info(StackedObj) of
-                          {ok, #file_info{size = Size}} when Size > 0 ->
-                              case file:read_file(StackedObj) of
-                                  {ok, Bin} ->
-                                      case catch file:consult(StackedInf) of
-                                          {ok, Term} ->
-                                              State_1#state{stack_obj  = Bin,
-                                                            stack_info = Term};
-                                          _ ->
-                                              State_1
-                                      end;
-                                  _ ->
-                                      State_1
-                              end;
-                          _ ->
-                              State_1
-                      end;
-                  false ->
-                      State#state{tmp_stacked_obj  = undefined,
-                                  tmp_stacked_inf  = undefined,
-                                  tmp_file_handler = undefined}
-              end,
+                   timeout  = Timeout,
+                   is_sending = false
+                  },
+    State_2 =
+        case TmpStackedDir of
+            [] ->
+                State;
+            _ ->
+                _ = filelib:ensure_dir(TmpStackedDir),
+                StackedObj = filename:join([TmpStackedDir,
+                                            lists:append([atom_to_list(Id), ".obj"])]),
+                StackedInf = filename:join([TmpStackedDir,
+                                            lists:append([atom_to_list(Id), ".inf"])]),
+                {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
+                {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
+                State_1 = State#state{tmp_stacked_obj = StackedObj,
+                                      tmp_stacked_inf = StackedInf,
+                                      tmp_file_handler = HandlerObj
+                                     },
+                case file:read_file_info(StackedObj) of
+                    {ok, #file_info{size = Size}} when Size > 0 ->
+                        case file:read_file(StackedObj) of
+                            {ok, Bin} ->
+                                case catch file:consult(StackedInf) of
+                                    {ok, Term} ->
+                                        State_1#state{stack_obj  = Bin,
+                                                      stack_info = Term};
+                                    _ ->
+                                        State_1
+                                end;
+                            _ ->
+                                State_1
+                        end;
+                    _ ->
+                        State_1
+                end
+        end,
     {ok, State_2, Timeout}.
 
 
@@ -167,14 +174,15 @@ handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
                                          buf_size = BufSize,
                                          is_compression_obj = IsComp,
-                                         timeout = Timeout} = State) ->
+                                         timeout  = Timeout} = State) ->
     case stack_fun(Straw, State) of
         {ok, #state{cur_size   = CurSize,
                     stack_obj  = StackObj,
                     stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
             Pid = spawn(fun() ->
-                                exec_fun(From, Module, Unit, IsComp, StackObj, StackInfo)
+                                exec_fun(From, Module, Unit,
+                                         IsComp, StackObj, StackInfo)
                         end),
             _MonitorRef = erlang:monitor(process, Pid),
             garbage_collect(self()),
@@ -195,10 +203,10 @@ handle_call(exec,_From, #state{cur_size = 0,
                             stack_info = [],
                             times = 0}, Timeout};
 
-handle_call(exec, From, #state{unit   = Unit,
-                               module = Module,
+handle_call(exec, From, #state{unit     = Unit,
+                               module   = Module,
                                is_compression_obj = IsComp,
-                               timeout = Timeout} = State) ->
+                               timeout  = Timeout} = State) ->
     spawn(fun() ->
                   exec_fun(From, Module, Unit, IsComp,
                            State#state.stack_obj, State#state.stack_info)
@@ -251,9 +259,10 @@ handle_info(timeout, #state{cur_size = CurSize,
                             timeout  = Timeout} = State) when CurSize == 0 ->
     {noreply, State#state{times = Times + 1}, Timeout};
 
-handle_info(timeout, #state{cur_size = CurSize,
+handle_info(timeout, #state{id = Id,
+                            cur_size = CurSize,
                             timeout  = Timeout} = State) when CurSize > 0 ->
-    timer:apply_after(100, ?MODULE, exec, [self()]),
+    timer:apply_after(100, ?MODULE, exec, [Id]),
     {noreply, State#state{times = 0}, Timeout};
 
 handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, #state{timeout = Timeout} = State) ->
@@ -329,39 +338,42 @@ exists_straw_id_1(Index, Straw, List) ->
                                       IsComp::boolean(),
                                       StackObj::binary(),
                                       StackInf::[any()]).
-exec_fun(From, Module, Unit, false = _IsComp, StackObj, StackInf) ->
-    exec_fun_1(From, Module, Unit, StackObj, StackInf);
+exec_fun(From, Module, Unit, false, StackObj, StackInf) ->
+    Reply = exec_fun_1(Module, Unit, StackObj, StackInf),
+    gen_server:reply(From, Reply);
 
-exec_fun(From, Module, Unit, true = _IsComp, StackObj, StackInf) ->
-    %% Compress objects
-    case catch lz4:pack(StackObj) of
-        {ok, CompressedObjs} ->
-            exec_fun_1(From, Module, Unit, CompressedObjs, StackInf);
-        {_, Cause} ->
-            Cause_1 = element(1, Cause),
-            gen_server:reply(From, {error, Cause_1})
-    end.
+exec_fun(From, Module, Unit, true, StackObj, StackInf) ->
+    %% Compress object-list
+    Reply = case catch lz4:pack(StackObj) of
+                {ok, CompressedObjs} ->
+                    exec_fun_1(Module, Unit, CompressedObjs, StackInf);
+                {_, Cause} ->
+                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                           [{module, ?MODULE_STRING},
+                                            {function, "exec_fun/6"},
+                                            {line, ?LINE}, {body, Cause}]),
+                    {error, element(1, Cause)}
+            end,
+    gen_server:reply(From, Reply).
+
 
 %% @private
-exec_fun_1(From, Module, Unit, Objs, StackInf) ->
-    %% Send objects to the client
-    Reply = case catch erlang:apply(Module, handle_send,
-                                    [Unit, StackInf, Objs]) of
+exec_fun_1(Module, Unit, Bin, StackInf) ->
+    %% Send compressed objects
+    Ret = case catch erlang:apply(Module, handle_send, [Unit, StackInf, Bin]) of
+        ok ->
+            ok;
+        {_,_Cause} ->
+            case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
                 ok ->
                     ok;
-                {_,_Cause} ->
-                    case catch erlang:apply(
-                                 Module, handle_fail, [Unit, StackInf]) of
-                        ok ->
-                            void;
-                        {_, Cause} ->
-                            Cause_1 = element(1, Cause),
-                            error_logger:error_msg("~p,~p,~p,~p~n",
-                                                   [{module, ?MODULE_STRING},
-                                                    {function, "exec_fun_1/5"},
-                                                    {line, ?LINE}, {body, Cause_1}])
-                    end,
-                    {error, StackInf}
+                {_, Cause_1} ->
+                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                           [{module, ?MODULE_STRING},
+                                            {function, "exec_fun_1/4"},
+                                            {line, ?LINE}, {body, Cause_1}])
             end,
+            {error, StackInf}
+    end,
     garbage_collect(self()),
-    gen_server:reply(From, Reply).
+    Ret.
