@@ -43,8 +43,7 @@
 
 -define(DEF_TIMEOUT, 30000).
 
--record(state, {id     :: atom(), %% container-id
-                unit   :: atom(), %% key
+-record(state, {unit   :: atom(), %% container's key
                 module :: atom(), %% callback-mod
                 buf_size = 0         :: non_neg_integer(), %% size of buffer
                 cur_size = 0         :: non_neg_integer(), %% size of current stacked objects
@@ -65,7 +64,7 @@
 %% ===================================================================
 %% @doc Start the server
 -spec(start_link(Id, StackInfo) ->
-             ok | {error, any()} when Id::atom(),
+             ok | {error, any()} when Id::term(),
                                       StackInfo::#stack_info{}).
 start_link(Id, StackInfo) ->
     gen_server:start_link(?MODULE, [Id, StackInfo], []).
@@ -109,8 +108,7 @@ init([{_, Id}, #stack_info{unit = Unit,
                            timeout = Timeout,
                            tmp_stacked_dir = TmpStackedDir
                           }]) ->
-    State = #state{id = Id,
-                   unit = Unit,
+    State = #state{unit = Unit,
                    module = Module,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
