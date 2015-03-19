@@ -149,10 +149,11 @@ init([#stack_info{unit = Unit,
                 %% Make a temporary dir of this process
                 %% and ".obj" and ".inf" files
                 _ = filelib:ensure_dir(TmpStackedDir),
+                FileName = leo_hex:integer_to_hex(erlang:phash2(Unit), 4),
                 StackedObj = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Unit), ".obj"])]),
+                                            lists:append([FileName, ".obj"])]),
                 StackedInf = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Unit), ".inf"])]),
+                                            lists:append([FileName, ".inf"])]),
                 {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
                 {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
                 State_1 = State#state{tmp_stacked_obj = StackedObj,
