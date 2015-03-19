@@ -391,7 +391,7 @@ exec_fun_1(Module, Unit, Bin, StackInf) ->
                     error_logger:error_msg("~p,~p,~p,~p~n",
                                            [{module, ?MODULE_STRING},
                                             {function, "exec_fun_1/4"},
-                                            {line, ?LINE}, {body, Cause_1}])
+                                            {line, ?LINE}, {body, element(1, Cause_1)}])
             end,
             {error, StackInf}
     end,
