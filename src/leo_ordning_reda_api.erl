@@ -92,6 +92,7 @@ add_container(Unit, Options) ->
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, PId} ->
+            ?debugVal({Unit, PId}),
             %% Remove the unnecessary record,
             %% then insert the record
             case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
@@ -165,7 +166,7 @@ has_container(Unit) ->
     case get_pid_by_unit(Unit) of
         {ok, PId} ->
             is_process_alive(PId);
-        {error, not_alive} ->
+        {error,_} ->
             false
     end.
 
