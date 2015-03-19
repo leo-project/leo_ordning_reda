@@ -32,7 +32,7 @@
 -include_lib("kernel/include/file.hrl").
 
 %% Application callbacks
--export([start_link/2, stop/1]).
+-export([start_link/1, stop/1]).
 -export([stack/3, exec/1, close/1]).
 -export([init/1,
          handle_call/3,
@@ -43,8 +43,7 @@
 
 -define(DEF_TIMEOUT, 30000).
 
--record(state, {id     :: atom(), %% container-id
-                unit   :: atom(), %% key
+-record(state, {unit   :: atom(), %% key
                 module :: atom(), %% callback-mod
                 buf_size = 0         :: non_neg_integer(), %% size of buffer
                 cur_size = 0         :: non_neg_integer(), %% size of current stacked objects
@@ -64,61 +63,78 @@
 %% API
 %% ===================================================================
 %% @doc Start the server
--spec(start_link(Id, StackInfo) ->
-             ok | {error, any()} when Id::atom(),
-                                      StackInfo::#stack_info{}).
-start_link(Id, StackInfo) ->
-    gen_server:start_link({local, Id}, ?MODULE,
-                          [Id, StackInfo], []).
+-spec(start_link(StackInfo) ->
+             ok | {error, any()} when StackInfo::#stack_info{}).
+start_link(StackInfo) ->
+    gen_server:start_link(?MODULE, [StackInfo], []).
 
 
 %% @doc Stop this server
--spec(stop(Id) ->
-             ok when Id::atom()).
-stop(Id) ->
-    gen_server:call(Id, stop, ?DEF_TIMEOUT).
+%% -spec(stop(Id) ->
+%%              ok when Id::atom()).
+%% stop(Id) ->
+%%     gen_server:call(Id, stop, ?DEF_TIMEOUT).
+-spec(stop(PId) ->
+             ok when PId::pid()).
+stop(PId) ->
+    gen_server:call(PId, stop, ?DEF_TIMEOUT).
 
 
 %% @doc Stack objects
--spec(stack(Id, StrawId, ObjBin) ->
-             ok | {error, any()} when Id::atom(),
+%% -spec(stack(Id, StrawId, ObjBin) ->
+%%              ok | {error, any()} when Id::atom(),
+%%                                       StrawId::any(),
+%%                                       ObjBin::binary()).
+%% stack(Id, StrawId, Obj) ->
+%%     gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
+%%                                         object = Obj,
+%%                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+-spec(stack(PId, StrawId, ObjBin) ->
+             ok | {error, any()} when PId::pid(),
                                       StrawId::any(),
                                       ObjBin::binary()).
-stack(Id, StrawId, Obj) ->
-    gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
+stack(PId, StrawId, Obj) ->
+    gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
                                         object = Obj,
                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
 %%
--spec(exec(Id) ->
-             ok | {error, any()} when Id::atom()).
-exec(Id) ->
-    gen_server:call(Id, exec, ?DEF_TIMEOUT).
+%% -spec(exec(Id) ->
+%%              ok | {error, any()} when Id::atom()).
+%% exec(Id) ->
+%%     gen_server:call(Id, exec, ?DEF_TIMEOUT).
+-spec(exec(PId) ->
+             ok | {error, any()} when PId::pid()).
+exec(PId) ->
+    gen_server:call(PId, exec, ?DEF_TIMEOUT).
 
 
 %% @doc Close a stacked file
 %%
--spec(close(Id) ->
-             ok | {error, any()} when Id::atom()).
-close(Id) ->
-    gen_server:call(Id, close, ?DEF_TIMEOUT).
+%% -spec(close(Id) ->
+%%              ok | {error, any()} when Id::atom()).
+%% close(Id) ->
+%%     gen_server:call(Id, close, ?DEF_TIMEOUT).
+-spec(close(PId) ->
+             ok | {error, any()} when PId::pid()).
+close(PId) ->
+    gen_server:call(PId, close, ?DEF_TIMEOUT).
 
 
 %%====================================================================
 %% GEN_SERVER CALLBACKS
 %%====================================================================
 %% @doc Initiates the server
-init([Id, #stack_info{unit = Unit,
-                      module = Module,
-                      buf_size = BufSize,
-                      is_compression_obj = IsComp,
-                      timeout = Timeout,
-                      tmp_stacked_dir = TmpStackedDir
-                     }]) ->
-    State = #state{id       = Id,
-                   unit     = Unit,
+init([#stack_info{unit = Unit,
+                  module = Module,
+                  buf_size = BufSize,
+                  is_compression_obj = IsComp,
+                  timeout = Timeout,
+                  tmp_stacked_dir = TmpStackedDir
+                 }]) ->
+    State = #state{unit     = Unit,
                    module   = Module,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
@@ -130,17 +146,22 @@ init([Id, #stack_info{unit = Unit,
             [] ->
                 State;
             _ ->
+                %% Make a temporary dir of this process
+                %% and ".obj" and ".inf" files
                 _ = filelib:ensure_dir(TmpStackedDir),
                 StackedObj = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Id), ".obj"])]),
+                                            lists:append([atom_to_list(Unit), ".obj"])]),
                 StackedInf = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Id), ".inf"])]),
+                                            lists:append([atom_to_list(Unit), ".inf"])]),
                 {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
                 {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
                 State_1 = State#state{tmp_stacked_obj = StackedObj,
                                       tmp_stacked_inf = StackedInf,
                                       tmp_file_handler = HandlerObj
                                      },
+
+                %% Retrieve the stacked object file
+                %% and then load it to this process
                 case file:read_file_info(StackedObj) of
                     {ok, #file_info{size = Size}} when Size > 0 ->
                         case file:read_file(StackedObj) of
@@ -252,17 +273,16 @@ handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
-    {noreply, State, Timeout};
+    {noreply, State#state{times = 0}, Timeout};
 
 handle_info(timeout, #state{cur_size = CurSize,
                             times    = Times,
                             timeout  = Timeout} = State) when CurSize == 0 ->
     {noreply, State#state{times = Times + 1}, Timeout};
 
-handle_info(timeout, #state{id = Id,
-                            cur_size = CurSize,
+handle_info(timeout, #state{cur_size = CurSize,
                             timeout  = Timeout} = State) when CurSize > 0 ->
-    timer:apply_after(100, ?MODULE, exec, [Id]),
+    timer:apply_after(100, ?MODULE, exec, [self()]),
     {noreply, State#state{times = 0}, Timeout};
 
 handle_info({'DOWN', MonitorRef,_Type,_Pid,_Info}, #state{timeout = Timeout} = State) ->
