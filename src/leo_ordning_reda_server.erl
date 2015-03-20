@@ -54,7 +54,6 @@
                 times   = 0          :: integer(),         %% NOT execution times
                 tmp_stacked_obj = [] :: string(),          %% Temporary stacked file path - object
                 tmp_stacked_inf = [] :: string(),          %% Temporary stacked file path - info
-                tmp_file_handler     :: pid(),             %% Temporary file handler
                 is_sending = false   :: boolean()          %% is sending a stacked object?
                }).
 
@@ -132,11 +131,8 @@ init([#stack_info{unit = Unit,
                                             lists:append([FileName, ".obj"])]),
                 StackedInf = filename:join([TmpStackedDir,
                                             lists:append([FileName, ".inf"])]),
-                {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
-                {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
                 State_1 = State#state{tmp_stacked_obj = StackedObj,
-                                      tmp_stacked_inf = StackedInf,
-                                      tmp_file_handler = HandlerObj
+                                      tmp_stacked_inf = StackedInf
                                      },
 
                 %% Retrieve the stacked object file
@@ -225,10 +221,14 @@ handle_call(close,_From, #state{tmp_stacked_inf = undefined,
 handle_call(close,_From, #state{stack_info = StackInfo,
                                 stack_obj  = StackObj,
                                 tmp_stacked_inf  = StackedInf,
-                                tmp_file_handler = Handler,
                                 timeout = Timeout} = State) ->
+    %% Output the stacked info
     catch leo_file:file_unconsult(StackedInf, StackInfo),
+
+    %% Output the stacked objects
+    {ok, Handler} = file:open(StackObj, [read, write, raw]),
     catch file:write(Handler, StackObj),
+    catch file:close(Handler),
     garbage_collect(self()),
     {reply, ok, State, Timeout}.
 
@@ -252,6 +252,7 @@ handle_info(timeout, #state{is_sending = true,
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
+
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State#state{times = 0}, Timeout};
 
