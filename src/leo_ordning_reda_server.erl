@@ -70,10 +70,6 @@ start_link(StackInfo) ->
 
 
 %% @doc Stop this server
-%% -spec(stop(Id) ->
-%%              ok when Id::atom()).
-%% stop(Id) ->
-%%     gen_server:call(Id, stop, ?DEF_TIMEOUT).
 -spec(stop(PId) ->
              ok when PId::pid()).
 stop(PId) ->
@@ -81,30 +77,17 @@ stop(PId) ->
 
 
 %% @doc Stack objects
-%% -spec(stack(Id, StrawId, ObjBin) ->
-%%              ok | {error, any()} when Id::atom(),
-%%                                       StrawId::any(),
-%%                                       ObjBin::binary()).
-%% stack(Id, StrawId, Obj) ->
-%%     gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
-%%                                         object = Obj,
-%%                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 -spec(stack(PId, StrawId, ObjBin) ->
              ok | {error, any()} when PId::pid(),
                                       StrawId::any(),
                                       ObjBin::binary()).
 stack(PId, StrawId, Obj) ->
     gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
-                                        object = Obj,
-                                        size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+                                         object = Obj,
+                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
-%%
-%% -spec(exec(Id) ->
-%%              ok | {error, any()} when Id::atom()).
-%% exec(Id) ->
-%%     gen_server:call(Id, exec, ?DEF_TIMEOUT).
 -spec(exec(PId) ->
              ok | {error, any()} when PId::pid()).
 exec(PId) ->
@@ -112,11 +95,6 @@ exec(PId) ->
 
 
 %% @doc Close a stacked file
-%%
-%% -spec(close(Id) ->
-%%              ok | {error, any()} when Id::atom()).
-%% close(Id) ->
-%%     gen_server:call(Id, close, ?DEF_TIMEOUT).
 -spec(close(PId) ->
              ok | {error, any()} when PId::pid()).
 close(PId) ->
@@ -194,6 +172,7 @@ handle_call({stack,_Straw},_From, #state{is_sending = true,
 
 handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
+                                         cur_size = _CurSize,
                                          buf_size = BufSize,
                                          is_compression_obj = IsComp,
                                          timeout  = Timeout} = State) ->
@@ -380,21 +359,21 @@ exec_fun(From, Module, Unit, true, StackObj, StackInf) ->
 
 %% @private
 exec_fun_1(Module, Unit, Bin, StackInf) ->
-    %% Send compressed objects
+    %% Send objects
     Ret = case catch erlang:apply(Module, handle_send, [Unit, StackInf, Bin]) of
-        ok ->
-            ok;
-        {_,_Cause} ->
-            case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
-                ok ->
-                    ok;
-                {_, Cause_1} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING},
-                                            {function, "exec_fun_1/4"},
-                                            {line, ?LINE}, {body, element(1, Cause_1)}])
-            end,
-            {error, StackInf}
-    end,
+              ok ->
+                  ok;
+              {_,_Cause} ->
+                  case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
+                      ok ->
+                          ok;
+                      {_, Cause_1} ->
+                          error_logger:error_msg("~p,~p,~p,~p~n",
+                                                 [{module, ?MODULE_STRING},
+                                                  {function, "exec_fun_1/4"},
+                                                  {line, ?LINE}, {body, element(1, Cause_1)}])
+                  end,
+                  {error, StackInf}
+          end,
     garbage_collect(self()),
     Ret.
