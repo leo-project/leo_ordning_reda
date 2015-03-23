@@ -54,7 +54,6 @@
                 times   = 0          :: integer(),         %% NOT execution times
                 tmp_stacked_obj = [] :: string(),          %% Temporary stacked file path - object
                 tmp_stacked_inf = [] :: string(),          %% Temporary stacked file path - info
-                tmp_file_handler     :: pid(),             %% Temporary file handler
                 is_sending = false   :: boolean()          %% is sending a stacked object?
                }).
 
@@ -70,10 +69,6 @@ start_link(StackInfo) ->
 
 
 %% @doc Stop this server
-%% -spec(stop(Id) ->
-%%              ok when Id::atom()).
-%% stop(Id) ->
-%%     gen_server:call(Id, stop, ?DEF_TIMEOUT).
 -spec(stop(PId) ->
              ok when PId::pid()).
 stop(PId) ->
@@ -81,30 +76,17 @@ stop(PId) ->
 
 
 %% @doc Stack objects
-%% -spec(stack(Id, StrawId, ObjBin) ->
-%%              ok | {error, any()} when Id::atom(),
-%%                                       StrawId::any(),
-%%                                       ObjBin::binary()).
-%% stack(Id, StrawId, Obj) ->
-%%     gen_server:call(Id, {stack, #?STRAW{id     = StrawId,
-%%                                         object = Obj,
-%%                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 -spec(stack(PId, StrawId, ObjBin) ->
              ok | {error, any()} when PId::pid(),
                                       StrawId::any(),
                                       ObjBin::binary()).
 stack(PId, StrawId, Obj) ->
     gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
-                                        object = Obj,
-                                        size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+                                         object = Obj,
+                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
-%%
-%% -spec(exec(Id) ->
-%%              ok | {error, any()} when Id::atom()).
-%% exec(Id) ->
-%%     gen_server:call(Id, exec, ?DEF_TIMEOUT).
 -spec(exec(PId) ->
              ok | {error, any()} when PId::pid()).
 exec(PId) ->
@@ -112,11 +94,6 @@ exec(PId) ->
 
 
 %% @doc Close a stacked file
-%%
-%% -spec(close(Id) ->
-%%              ok | {error, any()} when Id::atom()).
-%% close(Id) ->
-%%     gen_server:call(Id, close, ?DEF_TIMEOUT).
 -spec(close(PId) ->
              ok | {error, any()} when PId::pid()).
 close(PId) ->
@@ -149,15 +126,13 @@ init([#stack_info{unit = Unit,
                 %% Make a temporary dir of this process
                 %% and ".obj" and ".inf" files
                 _ = filelib:ensure_dir(TmpStackedDir),
+                FileName = leo_hex:integer_to_hex(erlang:phash2(Unit), 4),
                 StackedObj = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Unit), ".obj"])]),
+                                            lists:append([FileName, ".obj"])]),
                 StackedInf = filename:join([TmpStackedDir,
-                                            lists:append([atom_to_list(Unit), ".inf"])]),
-                {ok, HandlerObj} = file:open(StackedObj, [read, write, raw]),
-                {ok,_HandlerInf} = file:open(StackedInf, [read, write, raw]),
+                                            lists:append([FileName, ".inf"])]),
                 State_1 = State#state{tmp_stacked_obj = StackedObj,
-                                      tmp_stacked_inf = StackedInf,
-                                      tmp_file_handler = HandlerObj
+                                      tmp_stacked_inf = StackedInf
                                      },
 
                 %% Retrieve the stacked object file
@@ -193,6 +168,7 @@ handle_call({stack,_Straw},_From, #state{is_sending = true,
 
 handle_call({stack, Straw}, From, #state{unit     = Unit,
                                          module   = Module,
+                                         cur_size = _CurSize,
                                          buf_size = BufSize,
                                          is_compression_obj = IsComp,
                                          timeout  = Timeout} = State) ->
@@ -245,10 +221,14 @@ handle_call(close,_From, #state{tmp_stacked_inf = undefined,
 handle_call(close,_From, #state{stack_info = StackInfo,
                                 stack_obj  = StackObj,
                                 tmp_stacked_inf  = StackedInf,
-                                tmp_file_handler = Handler,
                                 timeout = Timeout} = State) ->
+    %% Output the stacked info
     catch leo_file:file_unconsult(StackedInf, StackInfo),
+
+    %% Output the stacked objects
+    {ok, Handler} = file:open(StackObj, [read, write, raw]),
     catch file:write(Handler, StackObj),
+    catch file:close(Handler),
     garbage_collect(self()),
     {reply, ok, State, Timeout}.
 
@@ -272,6 +252,7 @@ handle_info(timeout, #state{is_sending = true,
 handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
                             unit    = Unit,
                             timeout = Timeout} = State) ->
+
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State#state{times = 0}, Timeout};
 
@@ -379,21 +360,21 @@ exec_fun(From, Module, Unit, true, StackObj, StackInf) ->
 
 %% @private
 exec_fun_1(Module, Unit, Bin, StackInf) ->
-    %% Send compressed objects
+    %% Send objects
     Ret = case catch erlang:apply(Module, handle_send, [Unit, StackInf, Bin]) of
-        ok ->
-            ok;
-        {_,_Cause} ->
-            case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
-                ok ->
-                    ok;
-                {_, Cause_1} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING},
-                                            {function, "exec_fun_1/4"},
-                                            {line, ?LINE}, {body, Cause_1}])
-            end,
-            {error, StackInf}
-    end,
+              ok ->
+                  ok;
+              {_,_Cause} ->
+                  case catch erlang:apply(Module, handle_fail, [Unit, StackInf]) of
+                      ok ->
+                          ok;
+                      {_, Cause_1} ->
+                          error_logger:error_msg("~p,~p,~p,~p~n",
+                                                 [{module, ?MODULE_STRING},
+                                                  {function, "exec_fun_1/4"},
+                                                  {line, ?LINE}, {body, element(1, Cause_1)}])
+                  end,
+                  {error, StackInf}
+          end,
     garbage_collect(self()),
     Ret.

@@ -165,7 +165,7 @@ has_container(Unit) ->
     case get_pid_by_unit(Unit) of
         {ok, PId} ->
             is_process_alive(PId);
-        {error, not_alive} ->
+        {error,_} ->
             false
     end.
 
