@@ -320,13 +320,13 @@ exists_straw_id(Straw, List) ->
 
 %% @private
 exists_straw_id_1(0,_,_) ->
-    false;
+    true;
 exists_straw_id_1(Index, Straw, List) ->
     case lists:member(erlang:element(Index, Straw#?STRAW.id), List) of
         true ->
-            true;
+            exists_straw_id_1(Index - 1, Straw, List);
         false ->
-            exists_straw_id_1(Index - 1, Straw, List)
+            false
     end.
 
 
