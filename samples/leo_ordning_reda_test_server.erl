@@ -27,9 +27,8 @@ stack(Node, Key, Object) ->
 
 -spec handle_send(atom(), _, binary()) -> ok.
 handle_send(Node, StackInfo, CompressedBin) ->
-    ?debugVal({Node, length(StackInfo), byte_size(CompressedBin)}),
-    Res = rpc:call(Node, leo_ordning_reda_test_client, print, [CompressedBin]),
-    ?debugVal(Res),
+    Res = rpc:call(Node, leo_ordning_reda_test_client, output, [CompressedBin]),
+    ?debugVal({Res, Node, length(StackInfo), byte_size(CompressedBin)}),
     ok.
 
 -spec handle_fail(atom(), _) -> ok.
