@@ -193,14 +193,16 @@ stack(Unit, StrawId, Object) ->
 pack(Object) ->
     ObjBin = term_to_binary(Object),
     SizeBin = binary:encode_unsigned(byte_size(ObjBin)),
-    case byte_size(SizeBin) of
-        1 ->
-            {ok, <<0/integer, SizeBin/binary, ObjBin/binary>>};
-        2 ->
-            {ok, <<SizeBin/binary, ObjBin/binary>>};
-        _ ->
-            {error, "too big object!"}
-    end.
+	SizeBinSize = binary:encode_unsigned(byte_size(SizeBin)),
+	{ok, <<SizeBinSize/binary, SizeBin/binary, ObjBin/binary>>}.
+%    case byte_size(SizeBin) of
+%        1 ->
+%            {ok, <<0/integer, SizeBin/binary, ObjBin/binary>>};
+%        2 ->
+%            {ok, <<SizeBin/binary, ObjBin/binary>>};
+%        _ ->
+%            {error, "too big object!"}
+%    end.
 
 %% @doc Unpack the object
 %%
@@ -218,14 +220,18 @@ unpack_1(<<>>,_Fun) ->
     ok;
 unpack_1(Bin, Fun) ->
     %% Retrieve an object
-    H    = binary:part(Bin, {0, 2}),
+	HSizeH = binary:part(Bin, {0, 1}),
+	HSize = binary:decode_unsigned(HSizeH),
+	H = binary:part(Bin, {1, HSize}),
+%    H    = binary:part(Bin, {0, 2}),
     Size = binary:decode_unsigned(H),
-    Obj  = binary_to_term(binary:part(Bin, {2, Size})),
+%    Obj  = binary_to_term(binary:part(Bin, {2, Size})),
+	Obj = binary_to_term(binary:part(Bin, {1 + HSize, Size})),
     %% Execute fun
     Fun(Obj),
 
     %% Retrieve rest objects
-    Rest = binary:part(Bin, {2 + Size, byte_size(Bin) - 2 - Size}),
+    Rest = binary:part(Bin, {1 + HSize + Size, byte_size(Bin) - 1 - HSize - Size}),
     unpack_1(Rest, Fun).
 
 
