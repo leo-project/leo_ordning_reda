@@ -21,7 +21,9 @@ main() ->
     ok.
 
 -spec(output(binary()) ->
-    ok).
+             ok).
 output(CompressedBin) ->
-    Fun = fun(Obj) -> io:format("~p~n",[Obj]) end,
+    Fun = fun(Obj) ->
+                  io:format("~p~n",[Obj])
+          end,
     ok = leo_ordning_reda_api:unpack(CompressedBin, Fun).
