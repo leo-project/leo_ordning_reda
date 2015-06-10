@@ -6,7 +6,7 @@
 -define(BUFSIZE, 100). %% 100B
 -define(TIMEOUT, 100). %% 0.1sec
 
--export([main/0, print/1]).
+-export([main/0, output/1]).
 
 main() ->
     Node = node(),
@@ -20,7 +20,10 @@ main() ->
     ok = application:stop(leo_ordning_reda),
     ok.
 
-print(CompressedBin) ->
-    Objects = leo_ordning_reda_api:unpack(CompressedBin),
-    ?debugVal(Objects),
-    ok.
+-spec(output(binary()) ->
+             ok).
+output(CompressedBin) ->
+    Fun = fun(Obj) ->
+                  io:format("~p~n",[Obj])
+          end,
+    ok = leo_ordning_reda_api:unpack(CompressedBin, Fun).
