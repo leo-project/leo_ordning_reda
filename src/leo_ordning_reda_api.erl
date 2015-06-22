@@ -107,6 +107,8 @@ add_container(Unit, Options) ->
                 true ->
                     ok
             end;
+        {error,{already_started,_PId}} ->
+            ok;
         {error, Cause} ->
             {error, Cause}
     end.
