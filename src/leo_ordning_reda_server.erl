@@ -33,7 +33,7 @@
 
 %% Application callbacks
 -export([start_link/1, stop/1]).
--export([stack/3, exec/1, close/1]).
+-export([stack/3, exec/1, restart/1, close/1, state/1]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -47,14 +47,15 @@
                 module :: atom(), %% callback-mod
                 buf_size = 0         :: non_neg_integer(), %% size of buffer
                 cur_size = 0         :: non_neg_integer(), %% size of current stacked objects
-                stack_obj = <<>>     :: binary(),          %% stacked objects
-                stack_info = []      :: [term()],          %% list of stacked object-info
+                stacked_obj = <<>>   :: binary(),          %% stacked objects
+                stacked_info = []    :: [term()],          %% list of stacked object-info
                 is_compression_obj = true :: boolean(),    %% Is compression objects
                 timeout = 0          :: non_neg_integer(), %% stacking timeout
                 times   = 0          :: integer(),         %% NOT execution times
-                tmp_stacked_obj = [] :: string(),          %% Temporary stacked file path - object
-                tmp_stacked_inf = [] :: string(),          %% Temporary stacked file path - info
-                is_sending = false   :: boolean()          %% is sending a stacked object?
+                tmp_stacked_obj_path = [] :: string(),     %% Temporary stacked file path - object
+                tmp_stacked_inf_path = [] :: string(),     %% Temporary stacked file path - info
+                is_sending = false   :: boolean(),         %% is sending a stacked object?
+                is_active  = false   :: boolean()          %% is active this container
                }).
 
 
@@ -62,10 +63,10 @@
 %% API
 %% ===================================================================
 %% @doc Start the server
--spec(start_link(StackInfo) ->
-             ok | {error, any()} when StackInfo::#stack_info{}).
-start_link(StackInfo) ->
-    gen_server:start_link(?MODULE, [StackInfo], []).
+-spec(start_link(StackedInfo) ->
+             ok | {error, any()} when StackedInfo::#stack_info{}).
+start_link(StackedInfo) ->
+    gen_server:start_link(?MODULE, [StackedInfo], []).
 
 
 %% @doc Stop this server
@@ -81,9 +82,9 @@ stop(PId) ->
                                       StrawId::any(),
                                       ObjBin::binary()).
 stack(PId, StrawId, Obj) ->
-    gen_server:call(PId, {stack, #?STRAW{id     = StrawId,
+    gen_server:call(PId, {stack, #?STRAW{id = StrawId,
                                          object = Obj,
-                                         size   = byte_size(Obj)}}, ?DEF_TIMEOUT).
+                                         size = byte_size(Obj)}}, ?DEF_TIMEOUT).
 
 
 %% @doc Send stacked objects to remote-node(s).
@@ -93,11 +94,26 @@ exec(PId) ->
     gen_server:call(PId, exec, ?DEF_TIMEOUT).
 
 
+%% @doc Restart this container
+-spec(restart(PId) ->
+             {ok, StateL} | {error, any()} when PId::pid(),
+                                                StateL::[{atom(), any()}]).
+restart(PId) ->
+    gen_server:call(PId, restart, ?DEF_TIMEOUT).
+
+
 %% @doc Close a stacked file
 -spec(close(PId) ->
              ok | {error, any()} when PId::pid()).
 close(PId) ->
     gen_server:call(PId, close, ?DEF_TIMEOUT).
+
+
+%% @doc Retrieve the current status
+-spec(state(PId) ->
+             ok | {error, any()} when PId::pid()).
+state(PId) ->
+    gen_server:call(PId, state, ?DEF_TIMEOUT).
 
 
 %%====================================================================
@@ -109,16 +125,15 @@ init([#stack_info{unit = Unit,
                   buf_size = BufSize,
                   is_compression_obj = IsComp,
                   timeout = Timeout,
-                  tmp_stacked_dir = TmpStackedDir
-                 }]) ->
-    State = #state{unit     = Unit,
-                   module   = Module,
+                  tmp_stacked_dir = TmpStackedDir}]) ->
+    State = #state{unit = Unit,
+                   module = Module,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
-                   timeout  = Timeout,
-                   is_sending = false
-                  },
-    State_2 =
+                   timeout = Timeout,
+                   is_sending = false,
+                   is_active = true},
+    NewState =
         case TmpStackedDir of
             [] ->
                 State;
@@ -127,35 +142,15 @@ init([#stack_info{unit = Unit,
                 %% and ".obj" and ".inf" files
                 _ = filelib:ensure_dir(TmpStackedDir),
                 FileName = leo_hex:integer_to_hex(erlang:phash2(Unit), 4),
-                StackedObj = filename:join([TmpStackedDir,
-                                            lists:append([FileName, ".obj"])]),
-                StackedInf = filename:join([TmpStackedDir,
-                                            lists:append([FileName, ".inf"])]),
-                State_1 = State#state{tmp_stacked_obj = StackedObj,
-                                      tmp_stacked_inf = StackedInf
-                                     },
-
-                %% Retrieve the stacked object file
-                %% and then load it to this process
-                case file:read_file_info(StackedObj) of
-                    {ok, #file_info{size = Size}} when Size > 0 ->
-                        case file:read_file(StackedObj) of
-                            {ok, Bin} ->
-                                case catch file:consult(StackedInf) of
-                                    {ok, Term} ->
-                                        State_1#state{stack_obj  = Bin,
-                                                      stack_info = Term};
-                                    _ ->
-                                        State_1
-                                end;
-                            _ ->
-                                State_1
-                        end;
-                    _ ->
-                        State_1
-                end
+                StackedObjPath = filename:join([TmpStackedDir,
+                                                lists:append([FileName, ".obj"])]),
+                StackedInfPath = filename:join([TmpStackedDir,
+                                                lists:append([FileName, ".inf"])]),
+                State_1 = State#state{tmp_stacked_obj_path = StackedObjPath,
+                                      tmp_stacked_inf_path = StackedInfPath},
+                read_stacked_info(State_1)
         end,
-    {ok, State_2, Timeout}.
+    {ok, NewState, Timeout}.
 
 
 %% @doc gen_server callback - Module:handle_call(Request, From, State) -> Result
@@ -163,74 +158,82 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
 handle_call({stack,_Straw},_From, #state{is_sending = true,
-                                         timeout  = Timeout} = State) ->
+                                         timeout = Timeout} = State) ->
     {reply, {error, sending_data_to_remote}, State#state{times = 0}, Timeout};
-
-handle_call({stack, Straw}, From, #state{unit     = Unit,
-                                         module   = Module,
+handle_call({stack,_Straw},_From, #state{is_active = false,
+                                         timeout = Timeout} = State) ->
+    {reply, {error, not_available}, State#state{times = 0}, Timeout};
+handle_call({stack, Straw}, From, #state{unit = Unit,
+                                         module = Module,
                                          cur_size = _CurSize,
                                          buf_size = BufSize,
                                          is_compression_obj = IsComp,
-                                         timeout  = Timeout} = State) ->
+                                         timeout = Timeout} = State) ->
     case stack_fun(Straw, State) of
         {ok, #state{cur_size   = CurSize,
-                    stack_obj  = StackObj,
-                    stack_info = StackInfo} = NewState} when BufSize =< CurSize ->
+                    stacked_obj  = StackedObj,
+                    stacked_info = StackedInfo} = NewState} when BufSize =< CurSize ->
             timer:sleep(?env_send_after_interval()),
             Pid = spawn(fun() ->
                                 exec_fun(From, Module, Unit,
-                                         IsComp, StackObj, StackInfo)
+                                         IsComp, StackedObj, StackedInfo)
                         end),
             _MonitorRef = erlang:monitor(process, Pid),
             garbage_collect(self()),
-            {noreply, NewState#state{cur_size   = 0,
-                                     stack_obj  = <<>>,
-                                     stack_info = [],
-                                     times      = 0,
+            {noreply, NewState#state{cur_size = 0,
+                                     stacked_obj = <<>>,
+                                     stacked_info = [],
+                                     times = 0,
                                      is_sending = true}, Timeout};
         {ok, NewState} ->
             {reply, ok, NewState#state{times = 0}, Timeout}
     end;
 
 handle_call(exec,_From, #state{cur_size = 0,
-                               timeout  = Timeout} = State) ->
+                               timeout = Timeout} = State) ->
     garbage_collect(self()),
-    {reply, ok, State#state{cur_size   = 0,
-                            stack_obj  = <<>>,
-                            stack_info = [],
+    {reply, ok, State#state{cur_size = 0,
+                            stacked_obj = <<>>,
+                            stacked_info = [],
                             times = 0}, Timeout};
 
-handle_call(exec, From, #state{unit     = Unit,
-                               module   = Module,
+handle_call(exec, From, #state{unit = Unit,
+                               module = Module,
                                is_compression_obj = IsComp,
-                               timeout  = Timeout} = State) ->
+                               timeout = Timeout} = State) ->
     spawn(fun() ->
                   exec_fun(From, Module, Unit, IsComp,
-                           State#state.stack_obj, State#state.stack_info)
+                           State#state.stacked_obj, State#state.stacked_info)
           end),
     garbage_collect(self()),
-    {noreply, State#state{cur_size   = 0,
-                          stack_obj  = <<>>,
-                          stack_info = [],
+    {noreply, State#state{cur_size = 0,
+                          stacked_obj = <<>>,
+                          stacked_info = [],
                           times = 0}, Timeout};
 
-handle_call(close,_From, #state{tmp_stacked_inf = undefined,
-                                timeout = Timeout} = State) ->
-    garbage_collect(self()),
-    {reply, ok, State, Timeout};
-handle_call(close,_From, #state{stack_info = StackInfo,
-                                stack_obj  = StackObj,
-                                tmp_stacked_inf  = StackedInf,
-                                timeout = Timeout} = State) ->
-    %% Output the stacked info
-    catch leo_file:file_unconsult(StackedInf, StackInfo),
+handle_call(restart,_From, #state{timeout = Timeout} = State) ->
+    NewState = read_stacked_info(State),
+    StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
+    {reply, {ok, StateL}, NewState#state{is_active = true}, Timeout};
 
-    %% Output the stacked objects
-    {ok, Handler} = file:open(StackObj, [read, write, raw]),
-    catch file:write(Handler, StackObj),
-    catch file:close(Handler),
+handle_call(close,_From, #state{tmp_stacked_inf_path = undefined,
+                                timeout = Timeout} = State) ->
     garbage_collect(self()),
-    {reply, ok, State, Timeout}.
+    {reply, ok, State#state{is_active = false}, Timeout};
+
+handle_call(close,_From, #state{stacked_info = StackedInfo,
+                                stacked_obj = StackedObj,
+                                tmp_stacked_inf_path = StackedInfPath,
+                                tmp_stacked_obj_path = StackedObjPath,
+                                timeout = Timeout} = State) ->
+    ok = output_stacked_info(StackedInfPath, StackedInfo,
+                             StackedObjPath, StackedObj),
+    garbage_collect(self()),
+    {reply, ok, State#state{is_active = false}, Timeout};
+
+handle_call(state,_From, #state{timeout = Timeout} = State) ->
+    StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
+    {reply, {ok, StateL}, State, Timeout}.
 
 
 %% @doc Handling cast message
@@ -249,20 +252,20 @@ handle_info(timeout, #state{is_sending = true,
                             timeout = Timeout} = State) ->
     {noreply, State, Timeout};
 
-handle_info(timeout, #state{times   = ?DEF_REMOVED_TIME,
-                            unit    = Unit,
+handle_info(timeout, #state{times = ?DEF_REMOVED_TIME,
+                            unit = Unit,
                             timeout = Timeout} = State) ->
 
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
     {noreply, State#state{times = 0}, Timeout};
 
 handle_info(timeout, #state{cur_size = CurSize,
-                            times    = Times,
-                            timeout  = Timeout} = State) when CurSize == 0 ->
+                            times = Times,
+                            timeout = Timeout} = State) when CurSize == 0 ->
     {noreply, State#state{times = Times + 1}, Timeout};
 
 handle_info(timeout, #state{cur_size = CurSize,
-                            timeout  = Timeout} = State) when CurSize > 0 ->
+                            timeout = Timeout} = State) when CurSize > 0 ->
     timer:apply_after(100, ?MODULE, exec, [self()]),
     {noreply, State#state{times = 0}, Timeout};
 
@@ -276,7 +279,12 @@ handle_info(_Info, State) ->
 %% @doc This function is called by a gen_server when it is about to
 %%      terminate. It should be the opposite of Module:init/1 and do any necessary
 %%      cleaning up. When it returns, the gen_server terminates with Reason.
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{stacked_info = StackedInfo,
+                          stacked_obj = StackedObj,
+                          tmp_stacked_inf_path = StackedInf,
+                          tmp_stacked_obj_path = StackedObjPath} = _State) ->
+    ok = output_stacked_info(StackedInf, StackedInfo,
+                             StackedObjPath, StackedObj),
     ok.
 
 %% @doc Convert process state when code is changed
@@ -293,22 +301,22 @@ code_change(_OldVsn, State, _Extra) ->
              {ok, NextState} when Straw::#?STRAW{},
                                   State::#state{},
                                   NextState::#state{}).
-stack_fun(Straw, #state{cur_size   = CurSize,
-                        stack_obj  = StackObj_1,
-                        stack_info = StackInfo_1} = State) ->
-    List = [Key || {_, Key} <- StackInfo_1],
+stack_fun(Straw, #state{cur_size = CurSize,
+                        stacked_obj = StackedObj_1,
+                        stacked_info = StackedInfo_1} = State) ->
+    List = [Key || {_, Key} <- StackedInfo_1],
 
     case exists_straw_id(Straw, List) of
         true ->
             {ok, State};
         false ->
             Bin = Straw#?STRAW.object,
-            StackObj_2  = << StackObj_1/binary, Bin/binary>>,
-            StackInfo_2 = [ Straw#?STRAW.id | StackInfo_1],
+            StackedObj_2  = << StackedObj_1/binary, Bin/binary>>,
+            StackedInfo_2 = [ Straw#?STRAW.id | StackedInfo_1],
             Size = Straw#?STRAW.size + CurSize,
             {ok, State#state{cur_size   = Size,
-                             stack_obj  = StackObj_2,
-                             stack_info = StackInfo_2}}
+                             stacked_obj  = StackedObj_2,
+                             stacked_info = StackedInfo_2}}
     end.
 
 %% @private
@@ -332,20 +340,20 @@ exists_straw_id_1(Index, Straw, List) ->
 
 %% @doc Execute a function
 %% @private
--spec(exec_fun(From, Module, Unit, IsComp, StackObj, StackInf) ->
+-spec(exec_fun(From, Module, Unit, IsComp, StackedObj, StackInf) ->
              ok | {error, any()} when From::{pid(), _},
                                       Module::module(),
                                       Unit::atom(),
                                       IsComp::boolean(),
-                                      StackObj::binary(),
+                                      StackedObj::binary(),
                                       StackInf::[any()]).
-exec_fun(From, Module, Unit, false, StackObj, StackInf) ->
-    Reply = exec_fun_1(Module, Unit, StackObj, StackInf),
+exec_fun(From, Module, Unit, false, StackedObj, StackInf) ->
+    Reply = exec_fun_1(Module, Unit, StackedObj, StackInf),
     gen_server:reply(From, Reply);
 
-exec_fun(From, Module, Unit, true, StackObj, StackInf) ->
+exec_fun(From, Module, Unit, true, StackedObj, StackInf) ->
     %% Compress object-list
-    Reply = case catch lz4:pack(StackObj) of
+    Reply = case catch lz4:pack(StackedObj) of
                 {ok, CompressedObjs} ->
                     exec_fun_1(Module, Unit, CompressedObjs, StackInf);
                 {_, Cause} ->
@@ -378,3 +386,46 @@ exec_fun_1(Module, Unit, Bin, StackInf) ->
           end,
     garbage_collect(self()),
     Ret.
+
+
+%% @doc Retrieve the stacked object file
+%%      and then load it to this process
+-spec(read_stacked_info(State) ->
+             #state{} when State::#state{}).
+read_stacked_info(#state{tmp_stacked_obj_path = StackedObjPath,
+                         tmp_stacked_inf_path = StackedInfPath} = State) ->
+    case file:read_file_info(StackedObjPath) of
+        {ok, #file_info{size = Size}} when Size > 0 ->
+            case file:read_file(StackedObjPath) of
+                {ok, Bin} ->
+                    case catch file:consult(StackedInfPath) of
+                        {ok, Term} ->
+                            State#state{stacked_obj  = Bin,
+                                        stacked_info = Term};
+                        _ ->
+                            State
+                    end;
+                _ ->
+                    State
+            end;
+        _ ->
+            State
+    end.
+
+
+%% @doc Output stacked info to a local file
+-spec(output_stacked_info(StackedInfPath, StackedInfo, StackedObjPath, StackedObj) ->
+             ok when StackedInfPath::string(),
+                     StackedInfo::[term()],
+                     StackedObjPath::string(),
+                     StackedObj::binary()).
+output_stacked_info(StackedInfPath, StackedInfo,
+                    StackedObjPath, StackedObj) ->
+    %% Output the stacked info
+    catch leo_file:file_unconsult(StackedInfPath, StackedInfo),
+
+    %% Output the stacked objects
+    {ok, Handler} = file:open(StackedObjPath, [read, write, raw]),
+    catch file:write(Handler, StackedObj),
+    catch file:close(Handler),
+    ok.

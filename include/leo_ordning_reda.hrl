@@ -2,7 +2,7 @@
 %%
 %% Leo Ordning & Reda
 %%
-%% Copyright (c) 2012-2014 Rakuten, Inc.
+%% Copyright (c) 2012-2015 Rakuten, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,8 +19,6 @@
 %% under the License.
 %%
 %%======================================================================
--author('Yosuke Hara').
-
 -define(ETS_TAB_STACK_INFO,  leo_ordning_reda_stack_info).
 -define(ETS_TAB_STACK_PID,   leo_ordning_reda_stack_pid).
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).

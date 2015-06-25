@@ -9,7 +9,7 @@ We can easily write programs that automatically stack and compress large objects
 ## Build Information
 
 * "leo_ordning_reda" uses the [rebar](https://github.com/rebar/rebar) build system. Makefile so that simply running "make" at the top level should work.
-* "leo_ordning_reda" requires Erlang R15B03-1 or later.
+* "leo_ordning_reda" requires Erlang R16B03-1 or later.
 
 
 ## Usage in Leo Project
