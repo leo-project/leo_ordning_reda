@@ -165,6 +165,21 @@ stack_and_send_4_({Node0, Node1}) ->
                        ]),
     ok = leo_ordning_reda_api:close_container(Node0),
     ok = leo_ordning_reda_api:close_container(Node1),
+
+    lists:foreach(fun({N, Key, Obj}) ->
+                          {error, not_available} = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
+                  end, [{Node0, "K30", crypto:rand_bytes(4096)},
+                        {Node0, "K31", crypto:rand_bytes(4096)},
+                        {Node0, "K32", crypto:rand_bytes(4096)},
+                        {Node0, "K33", crypto:rand_bytes(4096)},
+                        {Node0, "K34", crypto:rand_bytes(4096)},
+                        {Node1, "K40", crypto:rand_bytes(4096)},
+                        {Node1, "K41", crypto:rand_bytes(4096)},
+                        {Node1, "K42", crypto:rand_bytes(4096)},
+                        {Node1, "K43", crypto:rand_bytes(4096)},
+                        {Node1, "K44", crypto:rand_bytes(4096)}
+                       ]),
+
     {ok, StateL_1} = leo_ordning_reda_api:restart_container(Node0),
     {ok, StateL_2} = leo_ordning_reda_api:restart_container(Node1),
     ?debugVal(StateL_1),

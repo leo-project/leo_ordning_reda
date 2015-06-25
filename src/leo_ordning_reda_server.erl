@@ -54,7 +54,8 @@
                 times   = 0          :: integer(),         %% NOT execution times
                 tmp_stacked_obj_path = [] :: string(),     %% Temporary stacked file path - object
                 tmp_stacked_inf_path = [] :: string(),     %% Temporary stacked file path - info
-                is_sending = false   :: boolean()          %% is sending a stacked object?
+                is_sending = false   :: boolean(),         %% is sending a stacked object?
+                is_active  = false   :: boolean()          %% is active this container
                }).
 
 
@@ -130,7 +131,8 @@ init([#stack_info{unit = Unit,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
                    timeout = Timeout,
-                   is_sending = false},
+                   is_sending = false,
+                   is_active = true},
     NewState =
         case TmpStackedDir of
             [] ->
@@ -158,7 +160,9 @@ handle_call(stop, _From, State) ->
 handle_call({stack,_Straw},_From, #state{is_sending = true,
                                          timeout = Timeout} = State) ->
     {reply, {error, sending_data_to_remote}, State#state{times = 0}, Timeout};
-
+handle_call({stack,_Straw},_From, #state{is_active = false,
+                                         timeout = Timeout} = State) ->
+    {reply, {error, not_available}, State#state{times = 0}, Timeout};
 handle_call({stack, Straw}, From, #state{unit = Unit,
                                          module = Module,
                                          cur_size = _CurSize,
@@ -210,12 +214,12 @@ handle_call(exec, From, #state{unit = Unit,
 handle_call(restart,_From, #state{timeout = Timeout} = State) ->
     NewState = read_stacked_info(State),
     StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
-    {reply, {ok, StateL}, NewState, Timeout};
+    {reply, {ok, StateL}, NewState#state{is_active = true}, Timeout};
 
 handle_call(close,_From, #state{tmp_stacked_inf_path = undefined,
                                 timeout = Timeout} = State) ->
     garbage_collect(self()),
-    {reply, ok, State, Timeout};
+    {reply, ok, State#state{is_active = false}, Timeout};
 
 handle_call(close,_From, #state{stacked_info = StackedInfo,
                                 stacked_obj = StackedObj,
@@ -225,7 +229,7 @@ handle_call(close,_From, #state{stacked_info = StackedInfo,
     ok = output_stacked_info(StackedInfPath, StackedInfo,
                              StackedObjPath, StackedObj),
     garbage_collect(self()),
-    {reply, ok, State, Timeout};
+    {reply, ok, State#state{is_active = false}, Timeout};
 
 handle_call(state,_From, #state{timeout = Timeout} = State) ->
     StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
