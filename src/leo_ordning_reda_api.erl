@@ -31,8 +31,12 @@
 
 %% Application callbacks
 -export([start/0, stop/0,
-         add_container/2, remove_container/1, has_container/1,
-         stack/3, pack/1, unpack/2, force_sending_obj/1]).
+         add_container/2, remove_container/1,
+         has_container/1,
+         restart_container/1, close_container/1,
+         stack/3, pack/1, unpack/2, force_sending_obj/1,
+         state/1
+        ]).
 
 %% -define(PREFIX, "leo_ord_reda_").
 
@@ -92,6 +96,7 @@ add_container(Unit, Options) ->
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, PId} ->
+            ?debugVal({PId, ChildId}),
             %% Remove the unnecessary record,
             %% then insert the record
             case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
@@ -172,6 +177,30 @@ has_container(Unit) ->
     end.
 
 
+%% @doc Restart the container
+-spec(restart_container(Unit) ->
+             ok | {error, any()} when Unit::atom()).
+restart_container(Unit) ->
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            leo_ordning_reda_server:restart(PId);
+        _ ->
+            {error, not_exist}
+    end.
+
+
+%% @doc Close the container
+-spec(close_container(Unit) ->
+             ok | {error, any()} when Unit::atom()).
+close_container(Unit) ->
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            leo_ordning_reda_server:close(PId);
+        _ ->
+            {error, not_exist}
+    end.
+
+
 %% @doc Stack the object into the container
 %%
 -spec(stack(Unit, StrawId, Object) ->
@@ -236,6 +265,19 @@ force_sending_obj(Unit) ->
     case get_pid_by_unit(Unit) of
         {ok, PId} ->
             leo_ordning_reda_server:exec(PId);
+        _ ->
+            {error, undefined}
+    end.
+
+
+%% @doc Retrieve a current state of the unit
+%%
+-spec(state(Unit) ->
+             ok | {error, undefined} when Unit::atom()).
+state(Unit) ->
+    case get_pid_by_unit(Unit) of
+        {ok, PId} ->
+            leo_ordning_reda_server:state(PId);
         _ ->
             {error, undefined}
     end.

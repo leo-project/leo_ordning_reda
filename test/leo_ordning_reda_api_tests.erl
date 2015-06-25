@@ -41,7 +41,8 @@ ordning_reda_test_() ->
      [{with, [T]} || T <- [fun stack_and_send_0_/1,
                            fun stack_and_send_1_/1,
                            fun stack_and_send_2_/1,
-                           fun stack_and_send_3_/1
+                           fun stack_and_send_3_/1,
+                           fun stack_and_send_4_/1
                           ]]}.
 
 setup() ->
@@ -144,9 +145,52 @@ stack_and_send_3_({Node0, Node1}) ->
     ok = leo_ordning_reda_stack_error:stop(Node1),
     ok.
 
+stack_and_send_4_({Node0, Node1}) ->
+    BufSize = 4096 * 8,
+    ok = leo_ordning_reda_stack:start_link(Node0, BufSize, ?TIMEOUT),
+    ok = leo_ordning_reda_stack:start_link(Node1, BufSize, ?TIMEOUT),
 
-%% proper_test_() ->
-%%     {timeout, 60000, ?_assertEqual([], proper:module(leo_ordning_reda_api_prop))}.
+    lists:foreach(fun({N, Key, Obj}) ->
+                          ok = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
+                  end, [{Node0, "K10", crypto:rand_bytes(4096)},
+                        {Node0, "K11", crypto:rand_bytes(4096)},
+                        {Node0, "K12", crypto:rand_bytes(4096)},
+                        {Node0, "K13", crypto:rand_bytes(4096)},
+                        {Node0, "K14", crypto:rand_bytes(4096)},
+                        {Node1, "K20", crypto:rand_bytes(4096)},
+                        {Node1, "K21", crypto:rand_bytes(4096)},
+                        {Node1, "K22", crypto:rand_bytes(4096)},
+                        {Node1, "K23", crypto:rand_bytes(4096)},
+                        {Node1, "K24", crypto:rand_bytes(4096)}
+                       ]),
+    ok = leo_ordning_reda_api:close_container(Node0),
+    ok = leo_ordning_reda_api:close_container(Node1),
+    {ok, StateL_1} = leo_ordning_reda_api:restart_container(Node0),
+    {ok, StateL_2} = leo_ordning_reda_api:restart_container(Node1),
+    ?debugVal(StateL_1),
+    ?debugVal(StateL_2),
+    ?assertEqual(Node0, leo_misc:get_value('unit', StateL_1)),
+    ?assertEqual(Node1, leo_misc:get_value('unit', StateL_2)),
+    ?assertEqual(true, byte_size(leo_misc:get_value('stacked_obj', StateL_1, <<>>)) > 0),
+    ?assertEqual(true, byte_size(leo_misc:get_value('stacked_obj', StateL_2, <<>>)) > 0),
+    ?assertEqual(true, length(leo_misc:get_value('stacked_info', StateL_1, <<>>)) > 0),
+    ?assertEqual(true, length(leo_misc:get_value('stacked_info', StateL_2, <<>>)) > 0),
+
+    ok = leo_ordning_reda_api:force_sending_obj(Node0),
+    ok = leo_ordning_reda_api:force_sending_obj(Node1),
+
+    {ok, StateL_1_1} = leo_ordning_reda_api:state(Node0),
+    {ok, StateL_2_1} = leo_ordning_reda_api:state(Node1),
+    ?debugVal(StateL_1_1),
+    ?debugVal(StateL_2_1),
+    ?assertEqual(true, byte_size(leo_misc:get_value('stacked_obj', StateL_1_1, <<>>)) == 0),
+    ?assertEqual(true, byte_size(leo_misc:get_value('stacked_obj', StateL_2_1, <<>>)) == 0),
+    ?assertEqual(true, length(leo_misc:get_value('stacked_info', StateL_1_1, <<>>)) == 0),
+    ?assertEqual(true, length(leo_misc:get_value('stacked_info', StateL_2_1, <<>>)) == 0),
+
+    ok = leo_ordning_reda_stack_error:stop(Node0),
+    ok = leo_ordning_reda_stack_error:stop(Node1),
+    ok.
 
 
 suite_test_() ->
