@@ -96,7 +96,6 @@ add_container(Unit, Options) ->
 
     case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
         {ok, PId} ->
-            ?debugVal({PId, ChildId}),
             %% Remove the unnecessary record,
             %% then insert the record
             case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
