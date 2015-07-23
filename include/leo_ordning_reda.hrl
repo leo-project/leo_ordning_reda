@@ -28,6 +28,7 @@
 -define(PROP_ORDRED_BUF_SIZE, 'buffer_size').
 -define(PROP_ORDRED_TIMEOUT,  'timeout').
 -define(PROP_ORDRED_IS_COMP,  'is_compress_obj').
+-define(PROP_REMOVED_COUNT,   'removed_count').
 
 
 -ifdef(TEST).
