@@ -81,12 +81,14 @@ add_container(Unit, Options) ->
     BufSize = leo_misc:get_value(?PROP_ORDRED_BUF_SIZE, Options, ?DEF_BUF_SIZE),
     Timeout = leo_misc:get_value(?PROP_ORDRED_TIMEOUT,  Options, ?REQ_TIMEOUT),
     IsComp  = leo_misc:get_value(?PROP_ORDRED_IS_COMP,  Options, true),
+    RemovedCount = leo_misc:get_value(?PROP_REMOVED_COUNT, Options, ?DEF_REMOVED_COUNT),
     TmpStackedDir = ?env_temp_stacked_dir(),
 
     Args = [#stack_info{unit     = Unit,
                         module   = Module,
                         buf_size = BufSize,
                         timeout  = Timeout,
+                        removed_count = RemovedCount,
                         is_compression_obj = IsComp,
                         tmp_stacked_dir = TmpStackedDir
                        }],
