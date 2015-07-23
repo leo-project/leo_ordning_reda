@@ -260,7 +260,8 @@ handle_info(timeout, #state{times = Times,
                             timeout = Timeout,
                             removed_count = RemovedCount} = State) when Times >= RemovedCount ->
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
-    {noreply, State#state{times = 0}, Timeout};
+    {noreply, State#state{times = 0,
+                          is_active = false}, Timeout};
 
 handle_info(timeout, #state{cur_size = CurSize,
                             times = Times,
