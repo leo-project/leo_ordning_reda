@@ -202,15 +202,7 @@ start_app() ->
     Module = leo_ordning_reda,
     case application:start(Module) of
         ok ->
-            case ets:info(?ETS_TAB_STACK_PID) of
-                undefined ->
-                    ?ETS_TAB_STACK_PID =
-                        ets:new(?ETS_TAB_STACK_PID,
-                                [named_table, set, public, {read_concurrency, true}]),
-                    ok;
-                _ ->
-                    ok
-            end;
+            ok;
         {error, {already_started, Module}} ->
             ok;
         {error, Cause} ->
