@@ -30,6 +30,12 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+-define(SHUTDOWN_WAITING_TIME, 2000).
+-define(MAX_RESTART, 5).
+-define(MAX_TIME, 60).
+-define(RETRY_TIMES, 5).
+
+
 %% ===================================================================
 %% API functions
 %% ===================================================================
@@ -50,7 +56,14 @@ stop() ->
 %% Supervisor callbacks
 %% ===================================================================
 init([]) ->
-    {ok, {{one_for_one, 5, 60}, []}}.
+    ChildProcs = [
+                  {leo_ordning_reda_manager,
+                   {leo_ordning_reda_manager, start_link, []},
+                   permanent,
+                   ?SHUTDOWN_WAITING_TIME,
+                   worker,
+                   [leo_ordning_reda_manager]}],
+    {ok, {{one_for_one, ?MAX_RESTART, ?MAX_TIME}, ChildProcs}}.
 
 
 %% ---------------------------------------------------------------------

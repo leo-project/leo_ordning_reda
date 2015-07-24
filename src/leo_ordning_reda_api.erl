@@ -76,48 +76,7 @@ stop() ->
              ok | {error, any()} when Unit::atom(),
                                       Options::[any()]).
 add_container(Unit, Options) ->
-    ChildId = {leo_ord_reda, Unit},
-    Module  = leo_misc:get_value(?PROP_ORDRED_MOD,      Options),
-    BufSize = leo_misc:get_value(?PROP_ORDRED_BUF_SIZE, Options, ?DEF_BUF_SIZE),
-    Timeout = leo_misc:get_value(?PROP_ORDRED_TIMEOUT,  Options, ?REQ_TIMEOUT),
-    IsComp  = leo_misc:get_value(?PROP_ORDRED_IS_COMP,  Options, true),
-    RemovedCount = leo_misc:get_value(?PROP_REMOVED_COUNT, Options, ?DEF_REMOVED_COUNT),
-    TmpStackedDir = ?env_temp_stacked_dir(),
-
-    Args = [#stack_info{unit     = Unit,
-                        module   = Module,
-                        buf_size = BufSize,
-                        timeout  = Timeout,
-                        removed_count = RemovedCount,
-                        is_compression_obj = IsComp,
-                        tmp_stacked_dir = TmpStackedDir
-                       }],
-    ChildSpec = {ChildId,
-                 {leo_ordning_reda_server, start_link, Args},
-                 temporary, 2000, worker, [leo_ordning_reda_server]},
-
-    case supervisor:start_child(leo_ordning_reda_sup, ChildSpec) of
-        {ok, PId} ->
-            %% Remove the unnecessary record,
-            %% then insert the record
-            case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
-                [Rec|_] ->
-                    catch ets:delete_object(?ETS_TAB_STACK_PID, Rec),
-                    ok;
-                _ ->
-                    ok
-            end,
-            case catch ets:insert(?ETS_TAB_STACK_PID, {Unit, PId}) of
-                {'EXIT', Cause} ->
-                    {error, Cause};
-                true ->
-                    ok
-            end;
-        {error,{already_started,_PId}} ->
-            ok;
-        {error, Cause} ->
-            {error, Cause}
-    end.
+    leo_ordning_reda_manager:add(Unit, Options).
 
 
 %% @doc Remove the container from the App
@@ -125,44 +84,7 @@ add_container(Unit, Options) ->
 -spec(remove_container(Unit) ->
              ok | {error, any()} when Unit::atom()).
 remove_container(Unit) ->
-    case get_pid_by_unit(Unit) of
-        {ok, PId} ->
-            case is_process_alive(PId) of
-                true ->
-                    case supervisor:which_children('leo_ordning_reda_sup') of
-                        [] ->
-                            ok;
-                        Children ->
-                            %% Remove the process from sup
-                            ok = remove_container_1(Children, PId),
-                            ?out_put_info_log("remove_container/1", Unit),
-
-                            %% Remove the unnecessary record
-                            case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
-                                [Rec|_] ->
-                                    catch ets:delete_object(?ETS_TAB_STACK_PID, Rec),
-                                    ok;
-                                _ ->
-                                    ok
-                            end
-                    end;
-                false ->
-                    ok
-            end;
-        _ ->
-            ok
-    end.
-
-
-%% @private
-remove_container_1([],_) ->
-    ok;
-remove_container_1([{_Id, PId, worker, ['leo_ordning_reda_server'|_]}|_], PId) ->
-    _ = supervisor:terminate_child(leo_ordning_reda_sup, _Id),
-    _ = supervisor:delete_child(leo_ordning_reda_sup, _Id),
-    ok;
-remove_container_1([_|T],PId) ->
-    remove_container_1(T, PId).
+    leo_ordning_reda_manager:delete(Unit).
 
 
 %% @doc Check whether the container exists
@@ -170,36 +92,21 @@ remove_container_1([_|T],PId) ->
 -spec(has_container(Unit) ->
              true | false when Unit::atom()).
 has_container(Unit) ->
-    case get_pid_by_unit(Unit) of
-        {ok, PId} ->
-            is_process_alive(PId);
-        {error,_} ->
-            false
-    end.
+    leo_ordning_reda_manager:is_exist(Unit).
 
 
 %% @doc Restart the container
 -spec(restart_container(Unit) ->
              ok | {error, any()} when Unit::atom()).
 restart_container(Unit) ->
-    case get_pid_by_unit(Unit) of
-        {ok, PId} ->
-            leo_ordning_reda_server:restart(PId);
-        _ ->
-            {error, not_exist}
-    end.
+    leo_ordning_reda_manager:restart(Unit).
 
 
 %% @doc Close the container
 -spec(close_container(Unit) ->
              ok | {error, any()} when Unit::atom()).
 close_container(Unit) ->
-    case get_pid_by_unit(Unit) of
-        {ok, PId} ->
-            leo_ordning_reda_server:close(PId);
-        _ ->
-            {error, not_exist}
-    end.
+    leo_ordning_reda_manager:close(Unit).
 
 
 %% @doc Stack the object into the container
@@ -209,7 +116,7 @@ close_container(Unit) ->
                                       StrawId::any(),
                                       Object::binary()).
 stack(Unit, StrawId, Object) ->
-    case get_pid_by_unit(Unit) of
+    case leo_ordning_reda_manager:get(Unit) of
         {ok, PId} ->
             leo_ordning_reda_server:stack(PId, StrawId, Object);
         _ ->
@@ -263,7 +170,7 @@ unpack_1(Bin, Fun) ->
 -spec(force_sending_obj(Unit) ->
              ok | {error, undefined} when Unit::atom()).
 force_sending_obj(Unit) ->
-    case get_pid_by_unit(Unit) of
+    case leo_ordning_reda_manager:get(Unit) of
         {ok, PId} ->
             leo_ordning_reda_server:exec(PId);
         _ ->
@@ -276,7 +183,7 @@ force_sending_obj(Unit) ->
 -spec(state(Unit) ->
              ok | {error, undefined} when Unit::atom()).
 state(Unit) ->
-    case get_pid_by_unit(Unit) of
+    case leo_ordning_reda_manager:get(Unit) of
         {ok, PId} ->
             leo_ordning_reda_server:state(PId);
         _ ->
@@ -312,20 +219,4 @@ start_app() ->
                                     {function, "start_app/0"},
                                     {line, ?LINE}, {body, Cause}]),
             {exit, Cause}
-    end.
-
-
-%% @doc Retrieve pid by the unit
-%% @private
--spec(get_pid_by_unit(Unit) ->
-             {ok, pid()} |
-             {error, not_alive} when Unit::atom()).
-get_pid_by_unit(Unit) ->
-    case catch ets:lookup(?ETS_TAB_STACK_PID, Unit) of
-        {'EXIT',Cause} ->
-            {error, Cause};
-        [] ->
-            {error, not_found};
-        [{_,PId}|_] ->
-            {ok, PId}
     end.

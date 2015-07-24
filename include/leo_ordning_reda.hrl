@@ -19,6 +19,8 @@
 %% under the License.
 %%
 %%======================================================================
+-compile(nowarn_deprecated_type).
+
 -define(ETS_TAB_STACK_INFO,  leo_ordning_reda_stack_info).
 -define(ETS_TAB_STACK_PID,   leo_ordning_reda_stack_pid).
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
