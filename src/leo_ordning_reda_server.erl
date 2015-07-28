@@ -53,8 +53,8 @@
                 timeout = 0          :: non_neg_integer(), %% stacking timeout
                 removed_count = 0    :: non_neg_integer(), %% removed container count (Timeout = ${timeout} x ${removed_count})
                 times   = 0          :: integer(),         %% NOT execution times
-                tmp_stacked_obj_path = [] :: string(),     %% Temporary stacked file path - object
-                tmp_stacked_inf_path = [] :: string(),     %% Temporary stacked file path - info
+                tmp_stacked_obj_path = [] :: string()|undefined, %% Temporary stacked file path - object
+                tmp_stacked_inf_path = [] :: string()|undefined, %% Temporary stacked file path - info
                 is_sending = false   :: boolean(),         %% is sending a stacked object?
                 is_active  = false   :: boolean()          %% is active this container
                }).
