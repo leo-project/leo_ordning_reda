@@ -1,7 +1,7 @@
 leo_ordning_reda
 ================
 
-[![Build Status](https://secure.travis-ci.org/leo-project/leo_ordning_reda.png?branch=master)](http://travis-ci.org/leo-project/leo_ordning_reda)
+[![Build Status](https://travis-ci.org/leo-project/leo_ordning_reda.svg?branch=develop)](https://travis-ci.org/leo-project/leo_ordning_reda)
 
 **leo_ordning_reda** is a library to handle large objects efficiently.
 We can easily write programs that automatically stack and compress large objects to pass them other processes.
@@ -99,3 +99,7 @@ handle_fail(Node, StackInfo) ->
 ## License
 
 leo_ordning_reda's license is [Apache License Version 2.0](http://www.apache.org/licenses/LICENSE-2.0.html)
+
+## Sponsors
+
+LeoProject/LeoFS is sponsored by [Rakuten, Inc.](http://global.rakuten.com/corp/) and suppoerted by [Rakuten Institute of Technology](http://rit.rakuten.co.jp/).
