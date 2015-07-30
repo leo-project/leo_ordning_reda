@@ -51,9 +51,10 @@
                 stacked_info = []    :: [term()],          %% list of stacked object-info
                 is_compression_obj = true :: boolean(),    %% Is compression objects
                 timeout = 0          :: non_neg_integer(), %% stacking timeout
+                removed_count = 0    :: non_neg_integer(), %% removed container count (Timeout = ${timeout} x ${removed_count})
                 times   = 0          :: integer(),         %% NOT execution times
-                tmp_stacked_obj_path = [] :: string(),     %% Temporary stacked file path - object
-                tmp_stacked_inf_path = [] :: string(),     %% Temporary stacked file path - info
+                tmp_stacked_obj_path = [] :: string()|undefined, %% Temporary stacked file path - object
+                tmp_stacked_inf_path = [] :: string()|undefined, %% Temporary stacked file path - info
                 is_sending = false   :: boolean(),         %% is sending a stacked object?
                 is_active  = false   :: boolean()          %% is active this container
                }).
@@ -125,12 +126,14 @@ init([#stack_info{unit = Unit,
                   buf_size = BufSize,
                   is_compression_obj = IsComp,
                   timeout = Timeout,
+                  removed_count = RemovedCount,
                   tmp_stacked_dir = TmpStackedDir}]) ->
     State = #state{unit = Unit,
                    module = Module,
                    buf_size = BufSize,
                    is_compression_obj = IsComp,
                    timeout = Timeout,
+                   removed_count = RemovedCount,
                    is_sending = false,
                    is_active = true},
     NewState =
@@ -252,12 +255,13 @@ handle_info(timeout, #state{is_sending = true,
                             timeout = Timeout} = State) ->
     {noreply, State, Timeout};
 
-handle_info(timeout, #state{times = ?DEF_REMOVED_TIME,
+handle_info(timeout, #state{times = Times,
                             unit = Unit,
-                            timeout = Timeout} = State) ->
-
+                            timeout = Timeout,
+                            removed_count = RemovedCount} = State) when Times >= RemovedCount ->
     timer:apply_after(100, leo_ordning_reda_api, remove_container, [Unit]),
-    {noreply, State#state{times = 0}, Timeout};
+    {noreply, State#state{times = 0,
+                          is_active = false}, Timeout};
 
 handle_info(timeout, #state{cur_size = CurSize,
                             times = Times,

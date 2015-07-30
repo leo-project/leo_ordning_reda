@@ -19,6 +19,8 @@
 %% under the License.
 %%
 %%======================================================================
+-compile(nowarn_deprecated_type).
+
 -define(ETS_TAB_STACK_INFO,  leo_ordning_reda_stack_info).
 -define(ETS_TAB_STACK_PID,   leo_ordning_reda_stack_pid).
 -define(ETS_TAB_DIVIDE_INFO, leo_ordning_reda_divide_info).
@@ -28,12 +30,13 @@
 -define(PROP_ORDRED_BUF_SIZE, 'buffer_size').
 -define(PROP_ORDRED_TIMEOUT,  'timeout').
 -define(PROP_ORDRED_IS_COMP,  'is_compress_obj').
+-define(PROP_REMOVED_COUNT,   'removed_count').
 
 
 -ifdef(TEST).
--define(DEF_REMOVED_TIME, 2).
+-define(DEF_REMOVED_COUNT, 5).
 -else.
--define(DEF_REMOVED_TIME, 3).
+-define(DEF_REMOVED_COUNT, 10).
 -endif.
 
 -define(DEF_BUF_SIZE, 1000000). %% about 1MB
@@ -46,8 +49,9 @@
           module       :: atom(),     %% callback module
           buf_size = 0 :: integer(),  %% buffer size
           is_compression_obj = true :: boolean(),  %% is compression stacked objects
-          timeout  = 0              :: integer(),  %% buffering timeout
-          tmp_stacked_dir = []      :: string()    %% temporary stacked dir
+          timeout  = 0 :: non_neg_integer(),  %% buffering timeout
+          removed_count = ?DEF_REMOVED_COUNT :: non_neg_integer(),  %% removed container count (Timeout = ${timeout} x ${removed_count})
+          tmp_stacked_dir = [] :: string()    %% temporary stacked dir
          }).
 
 -record(straw, {addr_id :: integer(), %% ring address id
