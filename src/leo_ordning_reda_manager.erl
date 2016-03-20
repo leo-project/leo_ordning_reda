@@ -56,8 +56,14 @@
 -define(out_put_info_log(_Fun,_Unit), ok).
 -endif.
 
+-ifdef(namespaced_types).
+-type otp_dict() :: dict:dict().
+-else.
+-type otp_dict() :: dict().
+-endif.
+
 -record(state, {
-          units = [] :: dict()
+          units = [] :: otp_dict()
          }).
 
 
