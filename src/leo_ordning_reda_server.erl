@@ -176,7 +176,13 @@ handle_call({stack, Straw}, From, #state{unit = Unit,
         {ok, #state{cur_size   = CurSize,
                     stacked_obj  = StackedObj,
                     stacked_info = StackedInfo} = NewState} when BufSize =< CurSize ->
-            timer:sleep(?env_send_after_interval()),
+            Interval = ?env_send_after_interval(),
+            case (Interval < 1) of
+                true ->
+                    void;
+                false ->
+                    timer:sleep(Interval)
+            end,
             Pid = spawn(fun() ->
                                 exec_fun(From, Module, Unit,
                                          IsComp, StackedObj, StackedInfo)
