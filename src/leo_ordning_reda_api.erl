@@ -138,11 +138,10 @@ pack(Object) ->
 
 %% @doc Unpack the object
 %%
--spec(unpack(CompressedBin, Fun) ->
-             ok when CompressedBin::binary(),
+-spec(unpack(Bin, Fun) ->
+             ok when Bin::binary(),
                      Fun::function()).
-unpack(CompressedBin, Fun) ->
-    {ok, Bin} = lz4:unpack(CompressedBin),
+unpack(Bin, Fun) ->
     unpack_1(Bin, Fun).
 
 -spec(unpack_1(Bin, Fun) ->

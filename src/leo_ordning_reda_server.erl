@@ -362,17 +362,7 @@ exec_fun(From, Module, Unit, false, StackedObj, StackInf) ->
     gen_server:reply(From, Reply);
 
 exec_fun(From, Module, Unit, true, StackedObj, StackInf) ->
-    %% Compress object-list
-    Reply = case catch lz4:pack(StackedObj) of
-                {ok, CompressedObjs} ->
-                    exec_fun_1(Module, Unit, CompressedObjs, StackInf);
-                {_, Cause} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING},
-                                            {function, "exec_fun/6"},
-                                            {line, ?LINE}, {body, Cause}]),
-                    {error, element(1, Cause)}
-            end,
+    Reply = exec_fun_1(Module, Unit, StackedObj, StackInf),
     gen_server:reply(From, Reply).
 
 
