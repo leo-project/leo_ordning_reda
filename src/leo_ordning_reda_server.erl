@@ -176,7 +176,13 @@ handle_call({stack, Straw}, From, #state{unit = Unit,
         {ok, #state{cur_size   = CurSize,
                     stacked_obj  = StackedObj,
                     stacked_info = StackedInfo} = NewState} when BufSize =< CurSize ->
-            timer:sleep(?env_send_after_interval()),
+            Interval = ?env_send_after_interval(),
+            case (Interval < 1) of
+                true ->
+                    void;
+                false ->
+                    timer:sleep(Interval)
+            end,
             Pid = spawn(fun() ->
                                 exec_fun(From, Module, Unit,
                                          IsComp, StackedObj, StackedInfo)
@@ -356,17 +362,7 @@ exec_fun(From, Module, Unit, false, StackedObj, StackInf) ->
     gen_server:reply(From, Reply);
 
 exec_fun(From, Module, Unit, true, StackedObj, StackInf) ->
-    %% Compress object-list
-    Reply = case catch lz4:pack(StackedObj) of
-                {ok, CompressedObjs} ->
-                    exec_fun_1(Module, Unit, CompressedObjs, StackInf);
-                {_, Cause} ->
-                    error_logger:error_msg("~p,~p,~p,~p~n",
-                                           [{module, ?MODULE_STRING},
-                                            {function, "exec_fun/6"},
-                                            {line, ?LINE}, {body, Cause}]),
-                    {error, element(1, Cause)}
-            end,
+    Reply = exec_fun_1(Module, Unit, StackedObj, StackInf),
     gen_server:reply(From, Reply).
 
 
