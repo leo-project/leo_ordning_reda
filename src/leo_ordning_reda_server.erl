@@ -453,8 +453,8 @@ output_stacked_info(StackedInfPath, StackedInfo,
 
         %% Output the stacked objects
         {ok, Handler} = file:open(StackedObjPath, [read, write, raw]),
-        file:write(Handler, StackedObj),
-        file:close(Handler),
+        ok = file:write(Handler, StackedObj),
+        ok = file:close(Handler),
         ok
     catch
         _ : Cause ->
