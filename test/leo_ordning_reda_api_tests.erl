@@ -78,17 +78,17 @@ stack_and_send_0_({Node0, Node1}) ->
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok  = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
-                  end, [{Node0, "K0", crypto:rand_bytes(1024)},
-                        {Node1, "K1", crypto:rand_bytes(1024)},
-                        {Node0, "K0", crypto:rand_bytes(1024)}, %% duplicate-data
-                        {Node0, "K2", crypto:rand_bytes(1024)},
-                        {Node1, "K3", crypto:rand_bytes(1024)},
-                        {Node0, "K4", crypto:rand_bytes(1024)},
-                        {Node1, "K5", crypto:rand_bytes(1024)},
-                        {Node0, "K6", crypto:rand_bytes(1024)},
-                        {Node1, "K7", crypto:rand_bytes(1024)},
-                        {Node0, "K8", crypto:rand_bytes(1024)},
-                        {Node1, "K9", crypto:rand_bytes(1024)}
+                  end, [{Node0, "K0", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K1", crypto:strong_rand_bytes(1024)},
+                        {Node0, "K0", crypto:strong_rand_bytes(1024)}, %% duplicate-data
+                        {Node0, "K2", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K3", crypto:strong_rand_bytes(1024)},
+                        {Node0, "K4", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K5", crypto:strong_rand_bytes(1024)},
+                        {Node0, "K6", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K7", crypto:strong_rand_bytes(1024)},
+                        {Node0, "K8", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K9", crypto:strong_rand_bytes(1024)}
                        ]),
     timer:sleep(4000),
     ok.
@@ -100,8 +100,8 @@ stack_and_send_1_({Node0, Node1}) ->
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, {-1, Key}, Obj),
                           timer:sleep(1000)
-                  end, [{Node0, "K10", crypto:rand_bytes(1024)},
-                        {Node1, "K11", crypto:rand_bytes(1024)}
+                  end, [{Node0, "K10", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K11", crypto:strong_rand_bytes(1024)}
                        ]),
     ok = leo_ordning_reda_stack:stop(Node0),
     ok = leo_ordning_reda_stack:stop(Node1),
@@ -114,8 +114,8 @@ stack_and_send_2_({Node0, Node1}) ->
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, {-1, Key}, Obj),
                           timer:sleep(1000)
-                  end, [{Node0, "K12", crypto:rand_bytes(1024)},
-                        {Node1, "K13", crypto:rand_bytes(1024)}
+                  end, [{Node0, "K12", crypto:strong_rand_bytes(1024)},
+                        {Node1, "K13", crypto:strong_rand_bytes(1024)}
                        ]),
     ok = leo_ordning_reda_stack_error:stop(Node0),
     ok = leo_ordning_reda_stack_error:stop(Node1),
@@ -128,16 +128,16 @@ stack_and_send_3_({Node0, Node1}) ->
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
-                  end, [{Node0, "K10", crypto:rand_bytes(4096)},
-                        {Node0, "K11", crypto:rand_bytes(4096)},
-                        {Node0, "K12", crypto:rand_bytes(4096)},
-                        {Node0, "K13", crypto:rand_bytes(4096)},
-                        {Node0, "K14", crypto:rand_bytes(4096)},
-                        {Node1, "K20", crypto:rand_bytes(4096)},
-                        {Node1, "K21", crypto:rand_bytes(4096)},
-                        {Node1, "K22", crypto:rand_bytes(4096)},
-                        {Node1, "K23", crypto:rand_bytes(4096)},
-                        {Node1, "K24", crypto:rand_bytes(4096)}
+                  end, [{Node0, "K10", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K11", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K12", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K13", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K14", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K20", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K21", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K22", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K23", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K24", crypto:strong_rand_bytes(4096)}
                        ]),
     ok = leo_ordning_reda_api:force_sending_obj(Node0),
     ok = leo_ordning_reda_api:force_sending_obj(Node1),
@@ -152,32 +152,32 @@ stack_and_send_4_({Node0, Node1}) ->
 
     lists:foreach(fun({N, Key, Obj}) ->
                           ok = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
-                  end, [{Node0, "K10", crypto:rand_bytes(4096)},
-                        {Node0, "K11", crypto:rand_bytes(4096)},
-                        {Node0, "K12", crypto:rand_bytes(4096)},
-                        {Node0, "K13", crypto:rand_bytes(4096)},
-                        {Node0, "K14", crypto:rand_bytes(4096)},
-                        {Node1, "K20", crypto:rand_bytes(4096)},
-                        {Node1, "K21", crypto:rand_bytes(4096)},
-                        {Node1, "K22", crypto:rand_bytes(4096)},
-                        {Node1, "K23", crypto:rand_bytes(4096)},
-                        {Node1, "K24", crypto:rand_bytes(4096)}
+                  end, [{Node0, "K10", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K11", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K12", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K13", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K14", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K20", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K21", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K22", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K23", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K24", crypto:strong_rand_bytes(4096)}
                        ]),
     ok = leo_ordning_reda_api:close_container(Node0),
     ok = leo_ordning_reda_api:close_container(Node1),
 
     lists:foreach(fun({N, Key, Obj}) ->
                           {error, not_available} = leo_ordning_reda_api:stack(N, {-1, Key}, Obj)
-                  end, [{Node0, "K30", crypto:rand_bytes(4096)},
-                        {Node0, "K31", crypto:rand_bytes(4096)},
-                        {Node0, "K32", crypto:rand_bytes(4096)},
-                        {Node0, "K33", crypto:rand_bytes(4096)},
-                        {Node0, "K34", crypto:rand_bytes(4096)},
-                        {Node1, "K40", crypto:rand_bytes(4096)},
-                        {Node1, "K41", crypto:rand_bytes(4096)},
-                        {Node1, "K42", crypto:rand_bytes(4096)},
-                        {Node1, "K43", crypto:rand_bytes(4096)},
-                        {Node1, "K44", crypto:rand_bytes(4096)}
+                  end, [{Node0, "K30", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K31", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K32", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K33", crypto:strong_rand_bytes(4096)},
+                        {Node0, "K34", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K40", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K41", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K42", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K43", crypto:strong_rand_bytes(4096)},
+                        {Node1, "K44", crypto:strong_rand_bytes(4096)}
                        ]),
 
     {ok, StateL_1} = leo_ordning_reda_api:restart_container(Node0),
@@ -263,7 +263,7 @@ loop(0, _, Sum) ->
     {ok, Sum};
 loop(Index, Node, Sum) ->
     Key = lists:append(["key_", integer_to_list(Index)]),
-    Obj = crypto:rand_bytes(erlang:phash2(Index, 1024)),
+    Obj = crypto:strong_rand_bytes(erlang:phash2(Index, 1024)),
     Size = erlang:byte_size(Obj),
     _ = leo_ordning_reda_api:stack(Node, {-1, Key}, Obj),
     loop(Index - 1, Node, Sum + Size).
