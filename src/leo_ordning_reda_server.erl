@@ -136,24 +136,27 @@ init([#stack_info{unit = Unit,
                    removed_count = RemovedCount,
                    is_sending = false,
                    is_active = true},
-    NewState =
-        case TmpStackedDir of
-            [] ->
-                State;
-            _ ->
-                %% Make a temporary dir of this process
-                %% and ".obj" and ".inf" files
-                _ = filelib:ensure_dir(TmpStackedDir),
-                FileName = leo_hex:integer_to_hex(erlang:phash2(Unit), 4),
-                StackedObjPath = filename:join([TmpStackedDir,
-                                                lists:append([FileName, ".obj"])]),
-                StackedInfPath = filename:join([TmpStackedDir,
-                                                lists:append([FileName, ".inf"])]),
-                State_1 = State#state{tmp_stacked_obj_path = StackedObjPath,
-                                      tmp_stacked_inf_path = StackedInfPath},
-                read_stacked_info(State_1)
-        end,
-    {ok, NewState, Timeout}.
+    case TmpStackedDir of
+        [] ->
+            State;
+        _ ->
+            %% Make a temporary dir of this process
+            %% and ".obj" and ".inf" files
+            _ = filelib:ensure_dir(TmpStackedDir),
+            FileName = leo_hex:integer_to_hex(erlang:phash2(Unit), 4),
+            StackedObjPath = filename:join([TmpStackedDir,
+                                            lists:append([FileName, ".obj"])]),
+            StackedInfPath = filename:join([TmpStackedDir,
+                                            lists:append([FileName, ".inf"])]),
+            State_1 = State#state{tmp_stacked_obj_path = StackedObjPath,
+                                  tmp_stacked_inf_path = StackedInfPath},
+            case read_stacked_info(State_1) of
+                {error, Cause} ->
+                    {stop, Cause};
+                NewState ->
+                    {ok, NewState, Timeout}
+            end
+    end.
 
 
 %% @doc gen_server callback - Module:handle_call(Request, From, State) -> Result
@@ -221,9 +224,13 @@ handle_call(exec, From, #state{unit = Unit,
                           times = 0}, Timeout};
 
 handle_call(restart,_From, #state{timeout = Timeout} = State) ->
-    NewState = read_stacked_info(State),
-    StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
-    {reply, {ok, StateL}, NewState#state{is_active = true}, Timeout};
+    case read_stacked_info(State) of
+        {error, Reason} ->
+            {reply, {error, Reason}, State, Timeout};
+        NewState ->
+            StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
+            {reply, {ok, StateL}, NewState#state{is_active = true}, Timeout}
+    end;
 
 handle_call(close,_From, #state{tmp_stacked_inf_path = undefined,
                                 timeout = Timeout} = State) ->
@@ -235,10 +242,10 @@ handle_call(close,_From, #state{stacked_info = StackedInfo,
                                 tmp_stacked_inf_path = StackedInfPath,
                                 tmp_stacked_obj_path = StackedObjPath,
                                 timeout = Timeout} = State) ->
-    ok = output_stacked_info(StackedInfPath, StackedInfo,
-                             StackedObjPath, StackedObj),
+    Ret = output_stacked_info(StackedInfPath, StackedInfo,
+                              StackedObjPath, StackedObj),
     garbage_collect(self()),
-    {reply, ok, State#state{is_active = false}, Timeout};
+    {reply, Ret, State#state{is_active = false}, Timeout};
 
 handle_call(state,_From, #state{timeout = Timeout} = State) ->
     StateL = lists:zip(record_info(fields, state), tl(tuple_to_list(State))),
@@ -293,8 +300,8 @@ terminate(_Reason, #state{stacked_info = StackedInfo,
                           stacked_obj = StackedObj,
                           tmp_stacked_inf_path = StackedInf,
                           tmp_stacked_obj_path = StackedObjPath} = _State) ->
-    ok = output_stacked_info(StackedInf, StackedInfo,
-                             StackedObjPath, StackedObj),
+    output_stacked_info(StackedInf, StackedInfo,
+                        StackedObjPath, StackedObj),
     ok.
 
 %% @doc Convert process state when code is changed
@@ -388,10 +395,11 @@ exec_fun_1(Module, Unit, Bin, StackInf) ->
     Ret.
 
 
-%% @doc Retrieve the stacked object file
-%%      and then load it to this process
+%% @doc Retrieve the stacked object file and then load it to this process
+%% @private
 -spec(read_stacked_info(State) ->
-             #state{} when State::#state{}).
+             #state{} | {error, Cause} when State::#state{},
+                                            Cause::any()).
 read_stacked_info(#state{tmp_stacked_obj_path = StackedObjPath,
                          tmp_stacked_inf_path = StackedInfPath} = State) ->
     case file:read_file_info(StackedObjPath) of
@@ -402,30 +410,57 @@ read_stacked_info(#state{tmp_stacked_obj_path = StackedObjPath,
                         {ok, Term} ->
                             State#state{stacked_obj  = Bin,
                                         stacked_info = Term};
-                        _ ->
-                            State
+                        {'EXIT', Cause} ->
+                            error_logger:error_msg("~p,~p,~p,~p~n",
+                                                   [{module, ?MODULE_STRING},
+                                                    {function, "read_stacked_info/1"},
+                                                    {line, ?LINE}, {body, Cause}]),
+                            {error, "file_consult_failure"}
                     end;
-                _ ->
-                    State
+                {error, Reason} ->
+                    error_logger:error_msg("~p,~p,~p,~p~n",
+                                           [{module, ?MODULE_STRING},
+                                            {function, "read_stacked_info/1"},
+                                            {line, ?LINE}, {body, Reason}]),
+                    {error, "read_file_failure"}
             end;
-        _ ->
-            State
+        {ok,_} ->
+            State;
+        {error, enoent} ->
+            State;
+        {error, Why} ->
+            error_logger:error_msg("~p,~p,~p,~p~n",
+                                   [{module, ?MODULE_STRING},
+                                    {function, "read_stacked_info/1"},
+                                    {line, ?LINE}, {body, Why}]),
+            {error, "read_file_info_failure"}
     end.
 
 
 %% @doc Output stacked info to a local file
+%% @private
 -spec(output_stacked_info(StackedInfPath, StackedInfo, StackedObjPath, StackedObj) ->
-             ok when StackedInfPath::string(),
-                     StackedInfo::[term()],
-                     StackedObjPath::string(),
-                     StackedObj::binary()).
+             ok | {error, Cause} when StackedInfPath::string(),
+                                      StackedInfo::[term()],
+                                      StackedObjPath::string(),
+                                      StackedObj::binary(),
+                                      Cause::any()).
 output_stacked_info(StackedInfPath, StackedInfo,
                     StackedObjPath, StackedObj) ->
     %% Output the stacked info
-    catch leo_file:file_unconsult(StackedInfPath, StackedInfo),
+    try
+        leo_file:file_unconsult(StackedInfPath, StackedInfo),
 
-    %% Output the stacked objects
-    {ok, Handler} = file:open(StackedObjPath, [read, write, raw]),
-    catch file:write(Handler, StackedObj),
-    catch file:close(Handler),
-    ok.
+        %% Output the stacked objects
+        {ok, Handler} = file:open(StackedObjPath, [read, write, raw]),
+        ok = file:write(Handler, StackedObj),
+        ok = file:close(Handler),
+        ok
+    catch
+        _ : Cause ->
+            error_logger:error_msg("~p,~p,~p,~p~n",
+                                   [{module, ?MODULE_STRING},
+                                    {function, "output_stacked_info/4"},
+                                    {line, ?LINE}, {body, Cause}]),
+            {error, "file_handling_failure"}
+    end.

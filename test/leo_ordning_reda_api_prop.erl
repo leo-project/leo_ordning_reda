@@ -59,7 +59,7 @@ key() ->
     frequency([{1, elements(?KEYS)}]).
 
 value() ->
-    crypto:rand_bytes(1024).
+    crypto:strong_rand_bytes(1024).
 
 
 %% @doc Property TEST
