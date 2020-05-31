@@ -4,6 +4,7 @@
 %% Leo Ordning & Reda
 %%
 %% Copyright (c) 2012-2018 Rakuten, Inc.
+%% Copyright (c) 2019-2020 Lions Data, Ltd.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -23,7 +24,7 @@
 {application, leo_ordning_reda,
  [
   {description, "Leo ordning & reda"},
-  {vsn, "1.2.11"},
+  {vsn, "1.2.12"},
   {registered, []},
   {applications, [
                   kernel,
