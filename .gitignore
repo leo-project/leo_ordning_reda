@@ -10,3 +10,5 @@ leo_*.dot
 work
 .rebar/
 doc/
+_build/
+erl_crash.dump

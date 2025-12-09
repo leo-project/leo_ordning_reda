@@ -1,16 +1,18 @@
 leo_ordning_reda
 ================
 
-[![Build Status](https://travis-ci.org/leo-project/leo_ordning_reda.svg?branch=develop)](https://travis-ci.org/leo-project/leo_ordning_reda)
-
 **leo_ordning_reda** is a library to handle large objects efficiently.
 We can easily write programs that automatically stack and compress large objects to pass them other processes.
 
 ## Build Information
 
-* "leo_ordning_reda" uses the [rebar](https://github.com/rebar/rebar) build system. Makefile so that simply running "make" at the top level should work.
-* "leo_ordning_reda" requires Erlang R16B03-1 or later.
+* "leo_ordning_reda" uses the [rebar3](https://github.com/erlang/rebar3) build system. Makefile so that simply running "make" at the top level should work.
+* "leo_ordning_reda" requires Erlang/OTP 24 or later (tested on OTP 28).
 
+## Dependencies
+
+* [leo_commons](https://github.com/leo-project/leo_commons) v1.3.0
+* [proper](https://github.com/proper-testing/proper) v1.5.0 (for testing)
 
 ## Usage in Leo Project
 
@@ -96,11 +98,35 @@ handle_fail(Node, StackInfo) ->
     ok.
 ```
 
+## Build
+
+```bash
+$ make
+```
+
+Or using rebar3 directly:
+
+```bash
+$ rebar3 compile
+```
+
+## Test
+
+```bash
+$ make test
+```
+
+Or using rebar3 directly:
+
+```bash
+$ rebar3 eunit
+```
+
 ## License
 
 leo_ordning_reda's license is [Apache License Version 2.0](http://www.apache.org/licenses/LICENSE-2.0.html)
 
 ## Sponsors
 
-* LeoProject/LeoFS was sponsored by [Rakuten, Inc.](https://global.rakuten.com/corp/) from 2012 to Dec of 2018.
 * LeoProject/LeoFS is sponsored by [Lions Data, Ltd.](https://lions-data.com/) from Jan of 2019.
+* LeoProject/LeoFS was sponsored by [Rakuten, Inc.](https://global.rakuten.com/corp/) from 2012 to Dec of 2018.
